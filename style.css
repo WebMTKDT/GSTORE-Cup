@@ -1,0 +1,239 @@
+/* ═══════════════════════════════════════════
+   GSTORE CUP — Estilos complementarios
+   ═══════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overflow-x: hidden;
+  touch-action: manipulation;
+}
+
+/* ── Vistas SPA ── */
+.view {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  display: none;
+}
+
+.view.active {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.view.hidden {
+  display: none !important;
+  opacity: 0;
+}
+
+/* ── Tarjetas / Paneles ── */
+.panel-card {
+  background: #4a4a4a;
+  border: 1px solid #a6a6a6;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── Botón principal ── */
+.btn-primary {
+  background: linear-gradient(180deg, #ec7700 0%, #c76500 100%);
+  color: #ffffff;
+  font-family: 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  border: 2px solid #a6a6a6;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(236, 119, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f08010 0%, #d06a00 100%);
+  box-shadow: 0 6px 24px rgba(236, 119, 0, 0.55);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.btn-primary:disabled {
+  cursor: not-allowed;
+}
+
+/* ── Selección de sucursal ── */
+.branch-btn {
+  background: #333333;
+  border: 2px solid #a6a6a6;
+  border-radius: 8px;
+  color: #e6e6e6;
+  font-family: 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  padding: 10px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.branch-btn:hover:not(.disabled-branch) {
+  border-color: #ec7700;
+  color: #ffffff;
+}
+
+.branch-btn.selected-local {
+  background: #ec7700;
+  border-color: #ffffff;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(236, 119, 0, 0.5);
+}
+
+.branch-btn.selected-away {
+  background: #4a4a4a;
+  border-color: #ec7700;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(236, 119, 0, 0.3);
+}
+
+.branch-btn.disabled-branch {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Contenedor del juego (16:9) ── */
+.game-container {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #2c7a3f;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── Controles táctiles ── */
+.touch-controls {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .touch-controls {
+    display: block;
+  }
+
+  #pc-hint {
+    display: none;
+  }
+}
+
+@media (hover: hover) {
+  .touch-controls {
+    display: none !important;
+  }
+}
+
+/* D-Pad */
+.dpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(3, 52px);
+  gap: 4px;
+}
+
+.dpad-btn {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  border: 2px solid rgba(166, 166, 166, 0.6);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, transform 0.1s;
+  user-select: none;
+}
+
+.dpad-btn:active,
+.dpad-btn.pressed {
+  background: rgba(236, 119, 0, 0.5);
+  transform: scale(0.92);
+  border-color: #ec7700;
+}
+
+.dpad-btn[data-dir="up"]    { grid-column: 2; grid-row: 1; }
+.dpad-btn[data-dir="left"]  { grid-column: 1; grid-row: 2; }
+.dpad-btn[data-dir="down"]  { grid-column: 2; grid-row: 3; }
+.dpad-btn[data-dir="right"] { grid-column: 3; grid-row: 2; }
+
+/* Botones de acción A/B */
+.action-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  font-family: 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.4rem;
+  border: 2px solid rgba(166, 166, 166, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s, background 0.1s;
+  user-select: none;
+  backdrop-filter: blur(4px);
+}
+
+.action-btn-a {
+  background: rgba(255, 255, 255, 0.12);
+  color: #4caf50;
+}
+
+.action-btn-b {
+  background: rgba(236, 119, 0, 0.25);
+  color: #ec7700;
+}
+
+.action-btn:active,
+.action-btn.pressed {
+  transform: scale(0.9);
+  border-color: #ec7700;
+}
+
+/* ── Leaderboard ── */
+.leaderboard-row {
+  border-bottom: 1px solid rgba(166, 166, 166, 0.2);
+  transition: background 0.2s;
+}
+
+.leaderboard-row:last-child {
+  border-bottom: none;
+}
+
+.leaderboard-row.highlight {
+  background: rgba(236, 119, 0, 0.15);
+}
+
+/* ── Animaciones ── */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}

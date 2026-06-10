@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="GSTORE CUP - Videojuego arcade de fútbol 2D" />
+  <title>GSTORE CUP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gstore: {
+              base: '#333333',
+              panel: '#4a4a4a',
+              border: '#a6a6a6',
+              muted: '#e6e6e6',
+              accent: '#ec7700',
+              'accent-dark': '#c76500',
+              grass: '#2c7a3f',
+              'grass-light': '#4caf50',
+            }
+          },
+          fontFamily: {
+            arcade: ['Oswald', 'Arial Narrow', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:ital,wght@1,400;1,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-gstore-base text-white font-arcade italic min-h-screen flex items-center justify-center p-2 sm:p-4">
+
+  <div id="app" class="w-full max-w-[1200px] mx-auto">
+
+    <!-- ═══ VISTA 1: INICIO ═══ -->
+    <section id="view-start" class="view active flex flex-col items-center justify-center gap-10 py-16 px-6">
+      <div class="text-center animate-pulse-slow">
+        <h1 class="text-5xl sm:text-7xl md:text-8xl font-bold tracking-wider text-white drop-shadow-lg">
+          GSTORE
+        </h1>
+        <h2 class="text-4xl sm:text-6xl md:text-7xl font-bold tracking-[0.3em] text-gstore-accent mt-2">
+          CUP
+        </h2>
+        <p class="text-gstore-muted text-lg sm:text-xl mt-4 tracking-wide">Fútbol Arcade 2D</p>
+      </div>
+      <button id="btn-play" class="btn-primary text-2xl sm:text-3xl px-12 py-4 tracking-widest">
+        JUGAR
+      </button>
+    </section>
+
+    <!-- ═══ VISTA 2: SELECCIÓN ═══ -->
+    <section id="view-selection" class="view hidden flex flex-col gap-6 py-8 px-4 sm:px-6">
+      <h2 class="text-3xl sm:text-4xl font-bold text-center text-white tracking-wide">ELIGE TU EQUIPO</h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Local -->
+        <div class="panel-card p-4">
+          <h3 class="text-gstore-accent text-xl font-bold mb-3 tracking-wide">LOCAL</h3>
+          <div id="grid-local" class="grid grid-cols-2 gap-2"></div>
+        </div>
+        <!-- Visitante -->
+        <div class="panel-card p-4">
+          <h3 class="text-gstore-muted text-xl font-bold mb-3 tracking-wide">VISITANTE</h3>
+          <div id="grid-away" class="grid grid-cols-2 gap-2"></div>
+        </div>
+      </div>
+
+      <div id="selection-summary" class="text-center text-gstore-muted text-lg min-h-[2rem]"></div>
+
+      <button id="btn-start-match" class="btn-primary text-xl sm:text-2xl px-10 py-3 mx-auto tracking-widest opacity-50 pointer-events-none" disabled>
+        INICIAR PARTIDO
+      </button>
+    </section>
+
+    <!-- ═══ VISTA 3: JUEGO ═══ -->
+    <section id="view-game" class="view hidden flex flex-col gap-2">
+      <!-- HUD -->
+      <div class="flex items-center justify-between px-2 sm:px-4 py-2 bg-gstore-panel/80 rounded-lg border border-gstore-border/40 backdrop-blur-sm">
+        <div class="flex-1 text-left">
+          <span id="hud-home-name" class="text-sm sm:text-base text-gstore-muted block truncate max-w-[120px] sm:max-w-none">LOCAL</span>
+          <span id="hud-home-score" class="text-3xl sm:text-4xl font-bold text-white">0</span>
+        </div>
+        <div class="flex-1 text-center">
+          <span id="hud-timer" class="text-2xl sm:text-3xl font-bold text-gstore-accent tracking-widest">03:00</span>
+        </div>
+        <div class="flex-1 text-right">
+          <span id="hud-away-name" class="text-sm sm:text-base text-gstore-muted block truncate max-w-[120px] sm:max-w-none ml-auto">VISITANTE</span>
+          <span id="hud-away-score" class="text-3xl sm:text-4xl font-bold text-white">0</span>
+        </div>
+      </div>
+
+      <!-- Canvas + controles táctiles -->
+      <div id="game-container" class="game-container relative w-full rounded-lg overflow-hidden border-2 border-gstore-border/50 shadow-2xl">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Controles móviles -->
+        <div id="touch-controls" class="touch-controls absolute inset-0 pointer-events-none">
+          <!-- D-Pad izquierda -->
+          <div class="absolute bottom-4 left-4 pointer-events-auto">
+            <div class="dpad-grid">
+              <button class="dpad-btn" data-dir="up" aria-label="Arriba">▲</button>
+              <button class="dpad-btn" data-dir="left" aria-label="Izquierda">◀</button>
+              <button class="dpad-btn" data-dir="down" aria-label="Abajo">▼</button>
+              <button class="dpad-btn" data-dir="right" aria-label="Derecha">▶</button>
+            </div>
+          </div>
+          <!-- Botones A/B derecha -->
+          <div class="absolute bottom-4 right-4 flex gap-4 pointer-events-auto">
+            <button id="btn-touch-a" class="action-btn action-btn-a" aria-label="Botón A">A</button>
+            <button id="btn-touch-b" class="action-btn action-btn-b" aria-label="Botón B">B</button>
+          </div>
+        </div>
+
+        <!-- Hint de controles PC -->
+        <div id="pc-hint" class="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gstore-muted/70 bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm">
+          WASD · J = Pase · K = Tiro
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ VISTA 4: LEADERBOARD ═══ -->
+    <section id="view-leaderboard" class="view hidden flex flex-col gap-6 py-8 px-4 sm:px-6">
+      <div class="text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold text-gstore-accent tracking-wide">RESULTADO FINAL</h2>
+        <p id="match-result" class="text-xl text-gstore-muted mt-2"></p>
+      </div>
+
+      <div class="panel-card p-4 sm:p-6 max-w-lg mx-auto w-full">
+        <h3 class="text-2xl font-bold text-white mb-4 text-center tracking-wide">TABLA DE POSICIONES</h3>
+        <table class="w-full text-left">
+          <thead>
+            <tr class="border-b border-gstore-border/40 text-gstore-muted text-sm">
+              <th class="pb-2 pl-2">#</th>
+              <th class="pb-2">SUCURSAL</th>
+              <th class="pb-2 text-right pr-2">PTS</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+      </div>
+
+      <button id="btn-home" class="btn-primary text-xl px-10 py-3 mx-auto tracking-widest">
+        VOLVER AL INICIO
+      </button>
+    </section>
+
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
