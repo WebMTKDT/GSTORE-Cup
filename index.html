@@ -39,26 +39,22 @@
   <div id="app" class="w-full max-w-[1200px] mx-auto">
 
     <!-- ═══ VISTA 1: INICIO ═══ -->
-    <section id="view-start" class="view view-start-screen active flex flex-col items-center justify-end gap-8 py-10 sm:py-14 px-6 min-h-[70vh] sm:min-h-[75vh]">
+    <section id="view-start" class="view view-start-screen active flex flex-col items-center justify-center gap-8 py-10 sm:py-14 px-6 min-h-[80vh]">
       <div class="start-bg" aria-hidden="true"></div>
       <div class="start-overlay" aria-hidden="true"></div>
 
-      <div class="start-content relative z-10 flex flex-col items-center gap-8 w-full">
-        <div class="text-center">
-          <p class="start-tagline text-gstore-accent text-sm sm:text-base tracking-[0.35em] mb-2">¡GANAMOS EL</p>
-          <h1 class="start-title-mundial text-5xl sm:text-7xl md:text-8xl leading-none">
-            GSTORE
-          </h1>
-          <h2 class="start-title-cup text-4xl sm:text-6xl md:text-7xl leading-none mt-1">
-            CUP
-          </h2>
-          <p class="start-subtitle text-white/90 text-base sm:text-lg mt-4 tracking-wide">Fútbol Arcade 2D</p>
+      <div class="start-content relative z-10 flex flex-col items-center justify-center gap-10 w-full max-w-xl mx-auto">
+        <div class="text-center w-full">
+          <p class="start-tagline text-gstore-accent mb-3">¡GANAMOS EL</p>
+          <h1 class="start-title-mundial leading-none">GSTORE</h1>
+          <h2 class="start-title-cup leading-none mt-2">CUP</h2>
+          <p class="start-subtitle text-white/90 mt-5">Fútbol Arcade 2D</p>
         </div>
-        <div class="flex flex-col sm:flex-row gap-4 items-center">
-          <button id="btn-play" class="btn-primary btn-mundial text-2xl sm:text-3xl px-12 py-4 tracking-widest">
+        <div class="flex flex-col sm:flex-row gap-4 items-center w-full sm:w-auto">
+          <button id="btn-play" class="btn-primary btn-mundial w-full sm:w-auto px-10 py-3.5">
             JUGAR
           </button>
-          <button id="btn-leaderboard" class="btn-secondary text-xl sm:text-2xl px-10 py-3 tracking-widest">
+          <button id="btn-leaderboard" class="btn-secondary w-full sm:w-auto px-8 py-3">
             VER POSICIONES
           </button>
         </div>
@@ -92,17 +88,17 @@
     <!-- ═══ VISTA 3: JUEGO ═══ -->
     <section id="view-game" class="view hidden flex flex-col gap-2">
       <!-- HUD -->
-      <div class="flex items-center justify-between px-2 sm:px-4 py-2 bg-gstore-panel/80 rounded-lg border border-gstore-border/40 backdrop-blur-sm">
-        <div class="flex-1 text-left">
-          <span id="hud-home-name" class="text-sm sm:text-base text-gstore-muted block truncate max-w-[120px] sm:max-w-none">LOCAL</span>
-          <span id="hud-home-score" class="text-3xl sm:text-4xl font-bold text-white">0</span>
+      <div class="game-hud flex items-center justify-between px-3 sm:px-5 py-2.5 bg-gstore-panel/80 rounded-lg border border-gstore-border/40 backdrop-blur-sm">
+        <div class="flex-1 text-left min-w-0">
+          <span id="hud-home-name" class="hud-team-name text-gstore-muted block truncate">LOCAL</span>
+          <span id="hud-home-score" class="hud-score font-bold text-white">0</span>
         </div>
-        <div class="flex-1 text-center">
-          <span id="hud-timer" class="text-2xl sm:text-3xl font-bold text-gstore-accent tracking-widest">03:00</span>
+        <div class="flex-1 text-center px-2">
+          <span id="hud-timer" class="hud-timer font-bold text-gstore-accent">03:00</span>
         </div>
-        <div class="flex-1 text-right">
-          <span id="hud-away-name" class="text-sm sm:text-base text-gstore-muted block truncate max-w-[120px] sm:max-w-none ml-auto">VISITANTE</span>
-          <span id="hud-away-score" class="text-3xl sm:text-4xl font-bold text-white">0</span>
+        <div class="flex-1 text-right min-w-0">
+          <span id="hud-away-name" class="hud-team-name text-gstore-muted block truncate ml-auto">VISITANTE</span>
+          <span id="hud-away-score" class="hud-score font-bold text-white">0</span>
         </div>
       </div>
 

@@ -39,6 +39,9 @@ const LERP_CHASE = 0.045;
 const LERP_BASE = 0.028;
 const GK_BOX_W = 95;
 const GK_BOX_H = 140;
+const GK_HOLD_TIME = 2;
+const BALL_RELEASE_IMMUNITY = 0.22;
+const BALL_SEPARATION = 1.2;
 
 // Colores de cancha
 const COLORS = {
@@ -250,6 +253,7 @@ function createPlayer(x, y, team, number, isGK = false) {
     baseY: y,
     role: 'mid',
     jitterTimer: Math.random() * 0.3,
+    gkHoldTimer: 0,
 
     update(dt, game) {
       updatePlayerEntity(this, game, dt);
@@ -414,7 +418,7 @@ function updateAIPassIntercept(g) {
 }
 
 function createBall() {
-  return { x: FIELD.w / 2, y: FIELD.h / 2, vx: 0, vy: 0, owner: null };
+  return { x: FIELD.w / 2, y: FIELD.h / 2, vx: 0, vy: 0, owner: null, releaseImmunity: 0 };
 }
 
 // ═══════════════════════════════════════════
@@ -542,23 +546,26 @@ function resolveBallWall(ball) {
 }
 
 function playerBallCollision(player, ball) {
+  if (ball.owner) return;
+
   const d = dist(player, ball);
-  const minDist = PLAYER_R + BALL_R;
+  const minDist = PLAYER_R + BALL_R + 2;
   if (d >= minDist || d === 0) return;
 
   const nx = (ball.x - player.x) / d;
   const ny = (ball.y - player.y) / d;
   const overlap = minDist - d;
-  ball.x += nx * overlap;
-  ball.y += ny * overlap;
+  ball.x += nx * overlap * BALL_SEPARATION;
+  ball.y += ny * overlap * BALL_SEPARATION;
 
-  // Transferir momentum
+  if (ball.releaseImmunity > 0) return;
+
   const relVx = ball.vx - player.vx;
   const relVy = ball.vy - player.vy;
   const dot = relVx * nx + relVy * ny;
   if (dot < 0) {
-    ball.vx -= dot * nx * 1.2;
-    ball.vy -= dot * ny * 1.2;
+    ball.vx -= dot * nx * 1.15;
+    ball.vy -= dot * ny * 1.15;
   }
 }
 
@@ -581,7 +588,10 @@ function playerPlayerCollision(a, b) {
 
 function updatePossession(g) {
   const { ball, allPlayers } = g;
+  const prevOwner = ball.owner;
   ball.owner = null;
+
+  if (ball.releaseImmunity > 0) return;
 
   let closest = null;
   let closestDist = POSSESS_DIST;
@@ -595,13 +605,71 @@ function updatePossession(g) {
   }
 
   if (closest && Math.hypot(ball.vx, ball.vy) < 6) {
+    if (prevOwner !== closest && closest.isGK) {
+      closest.gkHoldTimer = 0;
+    }
     ball.owner = closest;
-    // Pegar balón al jugador
     const angle = closest.aimAngle;
-    ball.x = closest.x + Math.cos(angle) * (PLAYER_R + BALL_R - 2);
-    ball.y = closest.y + Math.sin(angle) * (PLAYER_R + BALL_R - 2);
+    const offset = PLAYER_R + BALL_R + 3;
+    ball.x = closest.x + Math.cos(angle) * offset;
+    ball.y = closest.y + Math.sin(angle) * offset;
     ball.vx = closest.vx;
     ball.vy = closest.vy;
+  }
+}
+
+function findNearestTeammate(player, teammates) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const tm of teammates) {
+    if (tm === player) continue;
+    const d = dist(player, tm);
+    if (d < bestDist) {
+      bestDist = d;
+      best = tm;
+    }
+  }
+  return best;
+}
+
+function launchBallToward(ball, fromX, fromY, targetX, targetY, speed) {
+  const dx = targetX - fromX;
+  const dy = targetY - fromY;
+  const d = Math.hypot(dx, dy) || 1;
+  ball.owner = null;
+  ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+  ball.x = fromX + (dx / d) * (PLAYER_R + BALL_R + 6);
+  ball.y = fromY + (dy / d) * (PLAYER_R + BALL_R + 6);
+  ball.vx = (dx / d) * speed;
+  ball.vy = (dy / d) * speed;
+}
+
+function releaseGoalkeeperBall(g, gk) {
+  const teammates = g.allPlayers.filter((p) => p.team === gk.team && p !== gk);
+  const nearest = findNearestTeammate(gk, teammates);
+  const nearEnough = nearest && dist(gk, nearest) < 420;
+
+  if (nearEnough) {
+    launchBallToward(g.ball, gk.x, gk.y, nearest.x, nearest.y, PASS_FORCE);
+  } else {
+    const forward = gk.team === 'home' ? 1 : -1;
+    g.ball.owner = null;
+    g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+    g.ball.x = gk.x + forward * (PLAYER_R + BALL_R + 8);
+    g.ball.y = gk.y;
+    g.ball.vx = forward * PASS_FORCE * 1.15;
+    g.ball.vy = (Math.random() - 0.5) * 3;
+  }
+  gk.gkHoldTimer = 0;
+}
+
+function updateGoalkeeperLogic(g, dt) {
+  const owner = g.ball.owner;
+  if (!owner?.isGK) return;
+
+  owner.gkHoldTimer += dt;
+  if (owner.gkHoldTimer >= GK_HOLD_TIME) {
+    releaseGoalkeeperBall(g, owner);
   }
 }
 
@@ -645,24 +713,27 @@ function findPassTarget(active, teammates, aimAngle) {
 
 function doPass(g, player) {
   const teammates = g.homePlayers.filter((p) => p !== player);
-  const target = findPassTarget(player, teammates, player.aimAngle);
+  let target = findPassTarget(player, teammates, player.aimAngle);
+  if (!target) target = findNearestTeammate(player, teammates);
 
-  g.ball.owner = null;
   if (target) {
-    const dx = target.x - player.x;
-    const dy = target.y - player.y;
-    const d = Math.hypot(dx, dy);
-    g.ball.vx = (dx / d) * PASS_FORCE;
-    g.ball.vy = (dy / d) * PASS_FORCE;
+    launchBallToward(g.ball, player.x, player.y, target.x, target.y, PASS_FORCE);
   } else {
-    g.ball.vx = Math.cos(player.aimAngle) * PASS_FORCE;
-    g.ball.vy = Math.sin(player.aimAngle) * PASS_FORCE;
+    g.ball.owner = null;
+    g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+    const angle = player.aimAngle;
+    g.ball.x = player.x + Math.cos(angle) * (PLAYER_R + BALL_R + 6);
+    g.ball.y = player.y + Math.sin(angle) * (PLAYER_R + BALL_R + 6);
+    g.ball.vx = Math.cos(angle) * PASS_FORCE;
+    g.ball.vy = Math.sin(angle) * PASS_FORCE;
   }
+  if (player.isGK) player.gkHoldTimer = 0;
   g.actionCooldown = 15;
 }
 
 function doShoot(g, player, power) {
   g.ball.owner = null;
+  g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
   const force = SHOOT_BASE + (SHOOT_MAX - SHOOT_BASE) * power;
   // Disparar hacia portería rival (derecha)
   const goalX = FIELD.w - GOAL.w;
@@ -760,6 +831,7 @@ function resetAfterGoal(g, scorer) {
   g.ball.vx = 0;
   g.ball.vy = 0;
   g.ball.owner = null;
+  g.ball.releaseImmunity = 0;
   g.goalPause = 90; // ~1.5s a 60fps
 
   g.homePlayers = initializePlayers('home');
@@ -873,6 +945,10 @@ class Match {
       }
     }
 
+    if (this.ball.releaseImmunity > 0) {
+      this.ball.releaseImmunity = Math.max(0, this.ball.releaseImmunity - dt);
+    }
+
     // Física del balón
     if (!this.ball.owner) {
       this.ball.vx *= BALL_FRICTION;
@@ -880,14 +956,21 @@ class Match {
       this.ball.x += this.ball.vx;
       this.ball.y += this.ball.vy;
       resolveBallWall(this.ball);
-    }
 
-    // Colisiones balón-jugador
-    for (const p of this.allPlayers) {
-      playerBallCollision(p, this.ball);
+      for (const p of this.allPlayers) {
+        playerBallCollision(p, this.ball);
+      }
+    } else {
+      const owner = this.ball.owner;
+      const offset = PLAYER_R + BALL_R + 3;
+      this.ball.x = owner.x + Math.cos(owner.aimAngle) * offset;
+      this.ball.y = owner.y + Math.sin(owner.aimAngle) * offset;
+      this.ball.vx = owner.vx;
+      this.ball.vy = owner.vy;
     }
 
     updatePossession(this);
+    updateGoalkeeperLogic(this, dt);
     checkGoals(this);
 
     // ── Botones A / B ──
