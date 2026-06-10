@@ -491,11 +491,9 @@ function updatePlayerEntity(player, g, dt) {
     }
     clampPlayerSpeed(player, PLAYER_SPEED);
     player.stuckTimer = 0;
-  } else if (player.team === 'away' && g.ball.owner === player) {
-    updateAwayBallCarrier(player, g);
   } else {
     const pressers = player.team === 'home' ? g.pressersHome : g.pressersAway;
-    updateAIMovement(player, g, dt, pressers, maxSpd);
+    updateAI(player, g, dt, pressers, maxSpd);
   }
 
   player.vx *= FRICTION;
@@ -943,6 +941,7 @@ function resetAfterGoal(g, scorer) {
   g.ball.owner = null;
   g.ball.releaseImmunity = 0;
   g.goalPause = 90; // ~1.5s a 60fps
+  g.requestPass = false;
 
   g.homePlayers = initializePlayers('home');
   g.awayPlayers = initializePlayers('away');
@@ -969,6 +968,7 @@ class Match {
     this.aPressed = false;
     this.bPressed = false;
     this.aiShootCooldown = 0;
+    this.requestPass = false;
 
     this.homePlayers = initializePlayers('home');
     this.awayPlayers = initializePlayers('away');
@@ -1091,10 +1091,15 @@ class Match {
     const aDown = Input.isA();
     const bDown = Input.isB();
 
+    if (aDown && !this.aPressed) {
+      this.requestPass = true;
+    }
+
     if (userHasBall(this)) {
       // Ataque
       if (aDown && !this.aPressed && this.actionCooldown <= 0) {
         doPass(this, active);
+        this.requestPass = false;
       }
       if (bDown) {
         Input.bHoldTime += dt;
@@ -1161,6 +1166,89 @@ class Match {
   destroy() {
     this.running = false;
   }
+}
+
+// ═══════════════════════════════════════════
+// LÓGICA DE PASES (IA + USUARIO)
+// ═══════════════════════════════════════════
+
+function getAllRivals(player, g) {
+  return player.team === 'home' ? g.awayPlayers : g.homePlayers;
+}
+
+function isRivalClose(player, allRivals, radius = 90) {
+  return allRivals.some((r) => Math.hypot(r.x - player.x, r.y - player.y) < radius);
+}
+
+function checkLineOfSight(sender, receiver, allRivals) {
+  return lineOfSight(sender.x, sender.y, receiver.x, receiver.y, allRivals, PLAYER_R);
+}
+
+function performPass(g, sender, receiver) {
+  const ball = g.ball;
+  ball.owner = null;
+  ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+  ball.vx = (receiver.x - sender.x) * 0.15;
+  ball.vy = (receiver.y - sender.y) * 0.15;
+  const d = Math.hypot(receiver.x - sender.x, receiver.y - sender.y) || 1;
+  ball.x = sender.x + ((receiver.x - sender.x) / d) * (PLAYER_R + BALL_R + 6);
+  ball.y = sender.y + ((receiver.y - sender.y) / d) * (PLAYER_R + BALL_R + 6);
+  if (sender.isGK) sender.retentionTimer = 0;
+}
+
+function findBestOpenTeammate(sender, teammates, allRivals) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const tm of teammates) {
+    if (tm === sender) continue;
+    const d = dist(sender, tm);
+    if (d < 40 || d > 520) continue;
+    if (!checkLineOfSight(sender, tm, allRivals)) continue;
+    if (d < bestDist) {
+      bestDist = d;
+      best = tm;
+    }
+  }
+  return best;
+}
+
+function updateAIWithPassing(player, g) {
+  player.hasBall = g.ball.owner === player;
+  if (!player.hasBall) return;
+
+  const allRivals = getAllRivals(player, g);
+
+  if (g.requestPass && player.team === 'home' && !player.isActive && g.activePlayer) {
+    if (checkLineOfSight(player, g.activePlayer, allRivals)) {
+      performPass(g, player, g.activePlayer);
+      g.requestPass = false;
+      g.actionCooldown = 15;
+      return;
+    }
+  }
+
+  if (isRivalClose(player, allRivals, 90)) {
+    const teammates = (player.team === 'home' ? g.homePlayers : g.awayPlayers)
+      .filter((p) => p !== player);
+    const target = findBestOpenTeammate(player, teammates, allRivals);
+    if (target) {
+      performPass(g, player, target);
+      g.actionCooldown = 15;
+      return;
+    }
+  }
+
+  if (player.team === 'away') {
+    updateAwayBallCarrier(player, g);
+  } else if (!player.isActive) {
+    movePlayer(player, FIELD.w - GOAL.w - 80, FIELD.h / 2, MOVE_LERP_CHASE, AI_SPEED);
+  }
+}
+
+function updateAI(player, g, dt, pressers, maxSpeed) {
+  updateAIWithPassing(player, g);
+  if (player.hasBall) return;
+  updateAIMovement(player, g, dt, pressers, maxSpeed);
 }
 
 // ═══════════════════════════════════════════
