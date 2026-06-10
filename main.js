@@ -260,6 +260,7 @@ function createPlayer(x, y, team, number, isGK = false) {
     lastX: x,
     lastY: y,
     aiState: AI_STATE.TACTICAL,
+    wallTime: 0,
 
     update(dt, game) {
       updatePlayerEntity(this, game, dt);
@@ -439,10 +440,49 @@ function updateAwayBallCarrier(player, g) {
   movePlayer(player, goalX + 60, goalY, MOVE_LERP_CHASE, AI_SPEED);
 }
 
+function getPlayerWallBounds() {
+  return {
+    minX: GOAL.w + PLAYER_R,
+    maxX: FIELD.w - GOAL.w - PLAYER_R
+  };
+}
+
+function isPlayerAtSideWall(p) {
+  const { minX, maxX } = getPlayerWallBounds();
+  return p.x <= minX || p.x >= maxX;
+}
+
+function isPlayerWallBlocked(p) {
+  return p.wallTime > Date.now();
+}
+
+/** Rebote lateral: invierte vx, empuja fuera del muro y bloquea IA 1 s */
+function applyPlayerWallBounce(p) {
+  if (!isPlayerAtSideWall(p)) return;
+
+  p.vx = -p.vx;
+  p.x += p.vx > 0 ? 5 : -5;
+  p.wallTime = Date.now() + 1000;
+  p.aiState = AI_STATE.TACTICAL;
+}
+
+/** Durante wallTime la IA sale hacia el centro del campo */
+function updateWallExitMovement(player, maxSpeed) {
+  movePlayer(player, FIELD.w / 2, FIELD.h / 2, MOVE_LERP_TACTICAL * 1.1, maxSpeed * 0.85);
+  player.aiState = AI_STATE.TACTICAL;
+}
+
 function updatePlayerEntity(player, g, dt) {
   if (player.tackleCooldown > 0) player.tackleCooldown--;
 
-  if (player.team === 'home' && player.isActive) {
+  const maxSpd = player.team === 'home'
+    ? (player.isActive ? PLAYER_SPEED : PLAYER_SPEED * 0.92)
+    : AI_SPEED;
+
+  // PRIORIDAD: rebote / salida de muro antes que persecución del balón
+  if (isPlayerWallBlocked(player) && !(player.team === 'home' && player.isActive)) {
+    updateWallExitMovement(player, maxSpd);
+  } else if (player.team === 'home' && player.isActive) {
     const move = Input.getMoveVector();
     if (move.x !== 0 || move.y !== 0) {
       player.vx += move.x * 0.65;
@@ -455,18 +495,18 @@ function updatePlayerEntity(player, g, dt) {
     updateAwayBallCarrier(player, g);
   } else {
     const pressers = player.team === 'home' ? g.pressersHome : g.pressersAway;
-    const maxSpd = player.team === 'home' ? PLAYER_SPEED * 0.92 : AI_SPEED;
     updateAIMovement(player, g, dt, pressers, maxSpd);
   }
 
   player.vx *= FRICTION;
   player.vy *= FRICTION;
+
+  // Detección y rebote antes de aplicar velocidad a la posición
+  applyPlayerWallBounce(player);
+
   player.x += player.vx;
   player.y += player.vy;
   resolvePlayerWall(player);
-
-  if (player.x < PLAYER_R + 2) player.vx = 0.5;
-  if (player.x > FIELD.w - PLAYER_R - 2) player.vx = -0.5;
 }
 
 function updatePassIntercept(g) {
@@ -474,7 +514,7 @@ function updatePassIntercept(g) {
   if (ball.owner !== null || Math.hypot(ball.vx, ball.vy) <= 3) return;
 
   for (const p of allPlayers) {
-    if (p.isGK || p.isActive) continue;
+    if (p.isGK || p.isActive || isPlayerWallBlocked(p)) continue;
     if (dist(p, ball) < AI_CHASE_RADIUS) {
       const obstacles = allPlayers.filter((o) => o !== p);
       if (lineOfSight(p.x, p.y, ball.x + ball.vx * 4, ball.y + ball.vy * 4, obstacles, PLAYER_R)) {
