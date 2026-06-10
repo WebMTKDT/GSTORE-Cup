@@ -23,15 +23,17 @@ const GOAL = { w: 20, h: 180, margin: 30 };
 const BALL_R = 11;
 const PLAYER_R = 18;
 const FRICTION = 0.985;
-const BALL_FRICTION = 0.992;
-const PLAYER_SPEED = 3.8;
-const AI_SPEED = 3.2;
+const BALL_FRICTION = 0.975;
+const BALL_WALL_BOUNCE = 0.35;
+const PLAYER_SPEED = 2.5;
+const AI_SPEED = 1.7;
 const PASS_FORCE = 14;
 const SHOOT_BASE = 16;
 const SHOOT_MAX = 28;
 const TACKLE_FORCE = 8;
-const TACKLE_RANGE = 42;
-const TACKLE_EASY_RANGE = 60;
+const TACKLE_RANGE = 63;
+const TACKLE_EASY_RANGE = 90;
+const TACKLE_SUCCESS_RATE = 0.3;
 const POSSESS_DIST = PLAYER_R + BALL_R + 4;
 const INTERCEPT_RANGE = 120;
 const AI_CHASE_RADIUS = 200;
@@ -634,19 +636,19 @@ function resolveBallWall(ball) {
   const goalBot = goalTop + GOAL.h;
 
   // Paredes superior e inferior
-  if (ball.y - BALL_R < 0) { ball.y = BALL_R; ball.vy *= -0.7; }
-  if (ball.y + BALL_R > FIELD.h) { ball.y = FIELD.h - BALL_R; ball.vy *= -0.7; }
+  if (ball.y - BALL_R < 0) { ball.y = BALL_R; ball.vy *= -BALL_WALL_BOUNCE; }
+  if (ball.y + BALL_R > FIELD.h) { ball.y = FIELD.h - BALL_R; ball.vy *= -BALL_WALL_BOUNCE; }
 
   // Paredes laterales (excepto porterías)
   if (ball.x - BALL_R < 0) {
     if (ball.y > goalTop && ball.y < goalBot) return; // zona de gol
     ball.x = BALL_R;
-    ball.vx *= -0.7;
+    ball.vx *= -BALL_WALL_BOUNCE;
   }
   if (ball.x + BALL_R > FIELD.w) {
     if (ball.y > goalTop && ball.y < goalBot) return;
     ball.x = FIELD.w - BALL_R;
-    ball.vx *= -0.7;
+    ball.vx *= -BALL_WALL_BOUNCE;
   }
 }
 
@@ -669,8 +671,8 @@ function playerBallCollision(player, ball) {
   const relVy = ball.vy - player.vy;
   const dot = relVx * nx + relVy * ny;
   if (dot < 0) {
-    ball.vx -= dot * nx * 1.15;
-    ball.vy -= dot * ny * 1.15;
+    ball.vx -= dot * nx * 0.85;
+    ball.vy -= dot * ny * 0.85;
   }
 }
 
@@ -882,15 +884,18 @@ function doTackle(g, player) {
   player.vy += Math.sin(dashAngle) * TACKLE_FORCE;
 
   if (dist(player, g.ball) < TACKLE_EASY_RANGE) {
-    g.ball.owner = null;
-    g.ball.vx = player.x > g.ball.x ? -5 : 5;
-    g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+    if (Math.random() < TACKLE_SUCCESS_RATE) {
+      g.ball.owner = null;
+      g.ball.vx = player.x > g.ball.x ? -5 : 5;
+      g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+    }
   } else if (g.ball.owner && g.ball.owner.team === 'away') {
     const d = dist(player, g.ball.owner);
-    if (d < TACKLE_RANGE) {
+    if (d < TACKLE_RANGE && Math.random() < TACKLE_SUCCESS_RATE) {
       g.ball.owner = null;
       g.ball.vx = Math.cos(dashAngle) * 6;
       g.ball.vy = Math.sin(dashAngle) * 6;
+      g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
     }
   }
   g.actionCooldown = 20;
@@ -933,13 +938,26 @@ function syncAllPlayers(g) {
   return g.allPlayers;
 }
 
-function resetAfterGoal(g, scorer) {
+function assignKickoff(g) {
   g.ball.x = FIELD.w / 2;
   g.ball.y = FIELD.h / 2;
   g.ball.vx = 0;
   g.ball.vy = 0;
-  g.ball.owner = null;
   g.ball.releaseImmunity = 0;
+
+  if (Math.random() < 0.5 && g.activePlayer) {
+    const p = g.activePlayer;
+    p.x = FIELD.w / 2;
+    p.y = FIELD.h / 2;
+    p.vx = 0;
+    p.vy = 0;
+    g.ball.owner = p;
+  } else {
+    g.ball.owner = null;
+  }
+}
+
+function resetAfterGoal(g, scorer) {
   g.goalPause = 90; // ~1.5s a 60fps
   g.requestPass = false;
 
@@ -947,6 +965,7 @@ function resetAfterGoal(g, scorer) {
   g.awayPlayers = initializePlayers('away');
   g.homePlayers[2].isActive = true;
   syncAllPlayers(g);
+  assignKickoff(g);
   updateHUD(g);
 }
 
@@ -976,6 +995,7 @@ class Match {
 
     this.homePlayers[2].isActive = true;
     syncAllPlayers(this);
+    assignKickoff(this);
 
     this.canvas = $('#game-canvas');
     this.canvas.setAttribute('tabindex', '0');
