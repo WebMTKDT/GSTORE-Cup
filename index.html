@@ -31,7 +31,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:ital,wght@1,400;1,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@1,700;1,800;1,900&family=Oswald:ital,wght@1,400;1,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="bg-gstore-base text-white font-arcade italic min-h-screen flex items-center justify-center p-2 sm:p-4">
@@ -39,23 +39,29 @@
   <div id="app" class="w-full max-w-[1200px] mx-auto">
 
     <!-- ═══ VISTA 1: INICIO ═══ -->
-    <section id="view-start" class="view active flex flex-col items-center justify-center gap-10 py-16 px-6">
-      <div class="text-center animate-pulse-slow">
-        <h1 class="text-5xl sm:text-7xl md:text-8xl font-bold tracking-wider text-white drop-shadow-lg">
-          GSTORE
-        </h1>
-        <h2 class="text-4xl sm:text-6xl md:text-7xl font-bold tracking-[0.3em] text-gstore-accent mt-2">
-          CUP
-        </h2>
-        <p class="text-gstore-muted text-lg sm:text-xl mt-4 tracking-wide">Fútbol Arcade 2D</p>
-      </div>
-      <div class="flex flex-col sm:flex-row gap-4 items-center">
-        <button id="btn-play" class="btn-primary text-2xl sm:text-3xl px-12 py-4 tracking-widest">
-          JUGAR
-        </button>
-        <button id="btn-leaderboard" class="btn-secondary text-xl sm:text-2xl px-10 py-3 tracking-widest">
-          VER POSICIONES
-        </button>
+    <section id="view-start" class="view view-start-screen active flex flex-col items-center justify-end gap-8 py-10 sm:py-14 px-6 min-h-[70vh] sm:min-h-[75vh]">
+      <div class="start-bg" aria-hidden="true"></div>
+      <div class="start-overlay" aria-hidden="true"></div>
+
+      <div class="start-content relative z-10 flex flex-col items-center gap-8 w-full">
+        <div class="text-center">
+          <p class="start-tagline text-gstore-accent text-sm sm:text-base tracking-[0.35em] mb-2">¡GANAMOS EL</p>
+          <h1 class="start-title-mundial text-5xl sm:text-7xl md:text-8xl leading-none">
+            GSTORE
+          </h1>
+          <h2 class="start-title-cup text-4xl sm:text-6xl md:text-7xl leading-none mt-1">
+            CUP
+          </h2>
+          <p class="start-subtitle text-white/90 text-base sm:text-lg mt-4 tracking-wide">Fútbol Arcade 2D</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-4 items-center">
+          <button id="btn-play" class="btn-primary btn-mundial text-2xl sm:text-3xl px-12 py-4 tracking-widest">
+            JUGAR
+          </button>
+          <button id="btn-leaderboard" class="btn-secondary text-xl sm:text-2xl px-10 py-3 tracking-widest">
+            VER POSICIONES
+          </button>
+        </div>
       </div>
     </section>
 

@@ -12,6 +12,89 @@ body {
   touch-action: manipulation;
 }
 
+/* ── Pantalla de inicio — look Mundial ── */
+.view-start-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 2px solid rgba(166, 166, 166, 0.35);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
+}
+
+.start-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    url('assets/start-worldmap.png') center top / cover no-repeat,
+    url('assets/start-mundial.png') center center / cover no-repeat;
+  transform: scale(1.02);
+}
+
+.start-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.25) 35%,
+    rgba(51, 51, 51, 0.5) 65%,
+    rgba(51, 51, 51, 0.92) 100%
+  );
+}
+
+.start-content {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.start-tagline {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.start-title-mundial {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  -webkit-text-stroke: 2px #000000;
+  paint-order: stroke fill;
+  text-shadow:
+    4px 4px 0 #000000,
+    0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.start-title-cup {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #ec7700;
+  -webkit-text-stroke: 2px #000000;
+  paint-order: stroke fill;
+  text-shadow:
+    4px 4px 0 #000000,
+    0 0 30px rgba(236, 119, 0, 0.45);
+}
+
+.start-subtitle {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.btn-mundial {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
 /* ── Vistas SPA ── */
 .view {
   opacity: 0;

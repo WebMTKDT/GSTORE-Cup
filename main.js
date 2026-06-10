@@ -218,11 +218,24 @@ function updateSelectionUI() {
 // ENTIDADES DEL JUEGO
 // ═══════════════════════════════════════════
 
+function getFormationPositions(team) {
+  const isHome = team === 'home';
+  const dir = isHome ? 1 : -1;
+  const baseX = isHome ? 100 : FIELD.w - 100;
+  return [
+    { x: baseX, y: FIELD.h / 2, isGK: true },
+    { x: baseX + dir * 180, y: FIELD.h * 0.25, isGK: false },
+    { x: baseX + dir * 180, y: FIELD.h * 0.75, isGK: false },
+    { x: baseX + dir * 340, y: FIELD.h * 0.38, isGK: false },
+    { x: baseX + dir * 340, y: FIELD.h * 0.62, isGK: false }
+  ];
+}
+
 function createPlayer(x, y, team, number, isGK = false) {
-  return {
+  const player = {
     x, y,
     vx: 0, vy: 0,
-    team, // 'home' | 'away'
+    team,
     number,
     isGK,
     isActive: false,
@@ -230,32 +243,139 @@ function createPlayer(x, y, team, number, isGK = false) {
     aimAngle: team === 'home' ? 0 : Math.PI,
     lastX: x,
     lastY: y,
-    stuckTimer: 0
+    stuckTimer: 0,
+
+    /** Actualiza física y lógica de cada jugador (usuario o IA) */
+    update(dt, game) {
+      updatePlayerEntity(this, game, dt);
+    }
   };
+  return player;
 }
 
 function createFormation(team) {
-  const players = [];
-  const isHome = team === 'home';
-  const dir = isHome ? 1 : -1;
-  const baseX = isHome ? 100 : FIELD.w - 100;
+  return getFormationPositions(team).map((pos, i) =>
+    createPlayer(pos.x, pos.y, team, i + 1, pos.isGK)
+  );
+}
 
-  // Portero
-  players.push(createPlayer(baseX, FIELD.h / 2, team, 1, true));
+function clampPlayerSpeed(p, maxSpeed) {
+  const spd = Math.hypot(p.vx, p.vy);
+  if (spd > maxSpeed) {
+    p.vx = (p.vx / spd) * maxSpeed;
+    p.vy = (p.vy / spd) * maxSpeed;
+  }
+}
 
-  // 4 de campo en formación
-  const positions = [
-    { x: baseX + dir * 180, y: FIELD.h * 0.25 },
-    { x: baseX + dir * 180, y: FIELD.h * 0.75 },
-    { x: baseX + dir * 340, y: FIELD.h * 0.38 },
-    { x: baseX + dir * 340, y: FIELD.h * 0.62 }
-  ];
+function applySteering(p, targetX, targetY, accel) {
+  const dx = targetX - p.x;
+  const dy = targetY - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  if (d > 3) {
+    p.vx += (dx / d) * accel;
+    p.vy += (dy / d) * accel;
+    p.aimAngle = Math.atan2(dy, dx);
+  }
+}
 
-  positions.forEach((pos, i) => {
-    players.push(createPlayer(pos.x, pos.y, team, i + 2, false));
-  });
+function updateHomeTeammate(player, g) {
+  const idx = g.homePlayers.indexOf(player);
+  const form = getFormationPositions('home');
+  const target = form[idx];
+  if (target) applySteering(player, target.x, target.y, 0.28);
 
-  return players;
+  const ballDist = dist(player, g.ball);
+  if (!g.ball.owner && ballDist < 220) {
+    applySteering(player, g.ball.x, g.ball.y, 0.38);
+  } else if (g.ball.owner?.team === 'home' && ballDist < 300) {
+    applySteering(player, g.ball.x, g.ball.y, 0.22);
+  }
+  clampPlayerSpeed(player, PLAYER_SPEED * 0.9);
+}
+
+function updateAwayPlayerAI(player, g, dt) {
+  const { ball, awayPlayers, allPlayers } = g;
+  const midfield = FIELD.w / 2;
+  const ballDist = dist(player, ball);
+  const hasBall = ball.owner === player;
+  const homeHasBall = ball.owner && ball.owner.team === 'home';
+
+  if (hasBall) {
+    const goalX = 0;
+    const goalY = FIELD.h / 2;
+    if (player.x > midfield - 60 && g.aiShootCooldown <= 0) {
+      const dx = goalX - player.x;
+      const dy = goalY - player.y;
+      const d = Math.hypot(dx, dy) || 1;
+      ball.owner = null;
+      ball.vx = (dx / d) * (SHOOT_BASE + 4);
+      ball.vy = (dy / d) * (SHOOT_BASE + 4);
+      g.aiShootCooldown = 60;
+    } else {
+      applySteering(player, goalX + 60, goalY, 0.55);
+    }
+  } else if (ballDist < AI_CHASE_DIST) {
+    let targetX = ball.x;
+    let targetY = ball.y;
+    if (homeHasBall) {
+      const carrier = ball.owner;
+      const obstacles = allPlayers.filter((p) => p !== player);
+      if (!lineOfSight(player.x, player.y, ball.x, ball.y, obstacles, PLAYER_R)) {
+        targetX = carrier.x;
+        targetY = carrier.y;
+      }
+    }
+    applySteering(player, targetX, targetY, 0.6);
+  } else if (ballDist < AI_TACTICAL_DIST && !ball.owner) {
+    applySteering(player, ball.x, ball.y, 0.4);
+  } else {
+    const tactical = getTacticalPosition(player, awayPlayers, ball);
+    applySteering(player, tactical.x, tactical.y, 0.35);
+  }
+
+  clampPlayerSpeed(player, AI_SPEED);
+}
+
+function updatePlayerEntity(player, g, dt) {
+  if (player.tackleCooldown > 0) player.tackleCooldown--;
+
+  if (player.team === 'home') {
+    if (player.isActive) {
+      const move = Input.getMoveVector();
+      if (move.x !== 0 || move.y !== 0) {
+        player.vx += move.x * 0.65;
+        player.vy += move.y * 0.65;
+        player.aimAngle = Math.atan2(move.y, move.x);
+      }
+      clampPlayerSpeed(player, PLAYER_SPEED);
+    } else {
+      updateHomeTeammate(player, g);
+    }
+  } else {
+    updateAwayPlayerAI(player, g, dt);
+  }
+
+  player.vx *= FRICTION;
+  player.vy *= FRICTION;
+  player.x += player.vx;
+  player.y += player.vy;
+  resolvePlayerWall(player);
+
+  if (player.team === 'away') updateAIStuck(player, dt);
+}
+
+function updateAIPassIntercept(g) {
+  const { ball, awayPlayers, allPlayers } = g;
+  if (ball.owner !== null || Math.hypot(ball.vx, ball.vy) <= 3) return;
+
+  for (const ai of awayPlayers) {
+    if (dist(ai, ball) < POSSESS_DIST + 10) {
+      const obstacles = allPlayers.filter((p) => p !== ai);
+      if (lineOfSight(ai.x, ai.y, ball.x + ball.vx * 5, ball.y + ball.vy * 5, obstacles, PLAYER_R)) {
+        applySteering(ai, ball.x, ball.y, 0.7);
+      }
+    }
+  }
 }
 
 function createBall() {
@@ -594,17 +714,6 @@ function getTacticalPosition(ai, awayPlayers, ball) {
   };
 }
 
-function applyAIMovement(ai, targetX, targetY, accel) {
-  const dx = targetX - ai.x;
-  const dy = targetY - ai.y;
-  const d = Math.hypot(dx, dy) || 1;
-  if (d > 4) {
-    ai.vx += (dx / d) * accel;
-    ai.vy += (dy / d) * accel;
-    ai.aimAngle = Math.atan2(dy, dx);
-  }
-}
-
 function updateAIStuck(ai, dt) {
   const moved = Math.hypot(ai.x - ai.lastX, ai.y - ai.lastY);
   if (moved < 1.5) {
@@ -619,92 +728,6 @@ function updateAIStuck(ai, dt) {
     ai.vx += (Math.random() - 0.5) * 2.5;
     ai.vy += (Math.random() - 0.5) * 2.5;
     ai.stuckTimer = 0;
-  }
-}
-
-function updateAI(g, dt) {
-  const { ball, awayPlayers, homePlayers, allPlayers } = g;
-  const midfield = FIELD.w / 2;
-
-  for (const ai of awayPlayers) {
-    if (ai.tackleCooldown > 0) ai.tackleCooldown--;
-
-    let targetX, targetY;
-    const ballDist = dist(ai, ball);
-    const hasBall = ball.owner === ai;
-    const homeHasBall = ball.owner && ball.owner.team === 'home';
-
-    if (hasBall) {
-      const goalX = 0;
-      const goalY = FIELD.h / 2;
-      targetX = goalX + 60;
-      targetY = goalY;
-
-      if (ai.x > midfield - 60 && g.aiShootCooldown <= 0) {
-        const dx = goalX - ai.x;
-        const dy = goalY - ai.y;
-        const d = Math.hypot(dx, dy) || 1;
-        ball.owner = null;
-        ball.vx = (dx / d) * (SHOOT_BASE + 4);
-        ball.vy = (dy / d) * (SHOOT_BASE + 4);
-        g.aiShootCooldown = 60;
-      } else {
-        applyAIMovement(ai, targetX, targetY, 0.55);
-      }
-    } else if (ballDist < AI_CHASE_DIST) {
-      // Cerca del balón: persecución activa
-      targetX = ball.x;
-      targetY = ball.y;
-
-      if (homeHasBall) {
-        const carrier = ball.owner;
-        const obstacles = allPlayers.filter((p) => p !== ai);
-        if (lineOfSight(ai.x, ai.y, ball.x, ball.y, obstacles, PLAYER_R)) {
-          targetX = ball.x;
-          targetY = ball.y;
-        } else {
-          targetX = carrier.x;
-          targetY = carrier.y;
-        }
-      }
-
-      applyAIMovement(ai, targetX, targetY, 0.6);
-    } else if (ballDist < AI_TACTICAL_DIST && !ball.owner) {
-      // Balón libre a distancia media: acercarse
-      applyAIMovement(ai, ball.x, ball.y, 0.4);
-    } else {
-      // Balón lejos: posicionamiento táctico
-      const tactical = getTacticalPosition(ai, awayPlayers, ball);
-      targetX = tactical.x;
-      targetY = tactical.y;
-      applyAIMovement(ai, targetX, targetY, 0.35);
-    }
-
-    // Limitar velocidad IA
-    const spd = Math.hypot(ai.vx, ai.vy);
-    if (spd > AI_SPEED) {
-      ai.vx = (ai.vx / spd) * AI_SPEED;
-      ai.vy = (ai.vy / spd) * AI_SPEED;
-    }
-
-    ai.vx *= FRICTION;
-    ai.vy *= FRICTION;
-    ai.x += ai.vx;
-    ai.y += ai.vy;
-    resolvePlayerWall(ai);
-    updateAIStuck(ai, dt);
-  }
-
-  // Intercepción de pases en línea de visión
-  if (ball.owner === null && Math.hypot(ball.vx, ball.vy) > 3) {
-    for (const ai of awayPlayers) {
-      if (dist(ai, ball) < POSSESS_DIST + 10) {
-        const obstacles = allPlayers.filter((p) => p !== ai);
-        if (lineOfSight(ai.x, ai.y, ball.x + ball.vx * 5, ball.y + ball.vy * 5, obstacles, PLAYER_R)) {
-          applyAIMovement(ai, ball.x, ball.y, 0.7);
-        }
-      }
-    }
   }
 }
 
@@ -734,6 +757,13 @@ function checkGoals(g) {
   return false;
 }
 
+function syncAllPlayers(g) {
+  g.allPlayers = [...g.homePlayers, ...g.awayPlayers];
+  const active = g.homePlayers.find((p) => p.isActive);
+  if (active) g.activePlayer = active;
+  return g.allPlayers;
+}
+
 function resetAfterGoal(g, scorer) {
   g.ball.x = FIELD.w / 2;
   g.ball.y = FIELD.h / 2;
@@ -742,12 +772,10 @@ function resetAfterGoal(g, scorer) {
   g.ball.owner = null;
   g.goalPause = 90; // ~1.5s a 60fps
 
-  // Reposicionar jugadores
   g.homePlayers = createFormation('home');
   g.awayPlayers = createFormation('away');
-  g.allPlayers = [...g.homePlayers, ...g.awayPlayers];
   g.homePlayers[2].isActive = true;
-  g.activePlayer = g.homePlayers[2];
+  syncAllPlayers(g);
   updateHUD(g);
 }
 
@@ -772,20 +800,21 @@ class Match {
 
     this.homePlayers = createFormation('home');
     this.awayPlayers = createFormation('away');
-    this.allPlayers = [...this.homePlayers, ...this.awayPlayers];
     this.ball = createBall();
 
-    // Jugador activo: mediocampista
     this.homePlayers[2].isActive = true;
-    this.activePlayer = this.homePlayers[2];
+    syncAllPlayers(this);
 
     this.canvas = $('#game-canvas');
+    this.canvas.setAttribute('tabindex', '0');
+    this.canvas.addEventListener('click', () => this.canvas.focus());
     this.ctx = this.canvas.getContext('2d');
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
     Input.reset();
     this.setupHUD();
+    this.canvas.focus();
     this.running = true;
     this.lastTimestamp = performance.now();
     this.loop = this.loop.bind(this);
@@ -841,47 +870,11 @@ class Match {
     if (this.actionCooldown > 0) this.actionCooldown--;
     if (this.aiShootCooldown > 0) this.aiShootCooldown--;
 
+    const allPlayers = syncAllPlayers(this);
+    allPlayers.forEach((player) => player.update(dt, this));
+    updateAIPassIntercept(this);
+
     const active = this.activePlayer;
-    const move = Input.getMoveVector();
-
-    // Movimiento jugador activo
-    if (move.x !== 0 || move.y !== 0) {
-      active.vx += move.x * 0.6;
-      active.vy += move.y * 0.6;
-      active.aimAngle = Math.atan2(move.y, move.x);
-    }
-
-    const spd = Math.hypot(active.vx, active.vy);
-    if (spd > PLAYER_SPEED) {
-      active.vx = (active.vx / spd) * PLAYER_SPEED;
-      active.vy = (active.vy / spd) * PLAYER_SPEED;
-    }
-
-    // Otros jugadores locales siguen formación suavemente
-    for (const p of this.homePlayers) {
-      if (p === active) continue;
-      p.vx *= 0.9;
-      p.vy *= 0.9;
-      // Deriva hacia posición de formación
-      const idx = this.homePlayers.indexOf(p);
-      const form = createFormation('home');
-      const target = form[idx];
-      p.vx += (target.x - p.x) * 0.008;
-      p.vy += (target.y - p.y) * 0.008;
-    }
-
-    // Aplicar velocidad y fricción a locales
-    for (const p of this.homePlayers) {
-      p.vx *= FRICTION;
-      p.vy *= FRICTION;
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.tackleCooldown > 0) p.tackleCooldown--;
-      resolvePlayerWall(p);
-    }
-
-    // IA visitante
-    updateAI(this, dt);
 
     // Colisiones jugador-jugador
     for (let i = 0; i < this.allPlayers.length; i++) {
@@ -908,6 +901,8 @@ class Match {
     checkGoals(this);
 
     // ── Botones A / B ──
+    if (!active) return;
+
     const aDown = Input.isA();
     const bDown = Input.isB();
 
