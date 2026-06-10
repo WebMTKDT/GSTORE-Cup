@@ -33,15 +33,18 @@ const TACKLE_FORCE = 8;
 const TACKLE_RANGE = 42;
 const POSSESS_DIST = PLAYER_R + BALL_R + 4;
 const INTERCEPT_RANGE = 120;
-const AI_CHASE_DIST = 180;
-const AI_TACTICAL_DIST = 320;
-const LERP_CHASE = 0.045;
-const LERP_BASE = 0.028;
+const AI_CHASE_RADIUS = 200;
+const AI_MAX_PRESSERS = 2;
+const AI_STUCK_SECONDS = 2;
+const MOVE_LERP_CHASE = 0.12;
+const MOVE_LERP_TACTICAL = 0.07;
 const GK_BOX_W = 95;
 const GK_BOX_H = 140;
 const GK_HOLD_TIME = 2;
 const BALL_RELEASE_IMMUNITY = 0.22;
 const BALL_SEPARATION = 1.2;
+
+const AI_STATE = { CHASE: 'chase', TACTICAL: 'tactical', JITTER: 'jitter' };
 
 // Colores de cancha
 const COLORS = {
@@ -254,6 +257,10 @@ function createPlayer(x, y, team, number, isGK = false) {
     role: 'mid',
     jitterTimer: Math.random() * 0.3,
     gkHoldTimer: 0,
+    stuckTimer: 0,
+    lastX: x,
+    lastY: y,
+    aiState: AI_STATE.TACTICAL,
 
     update(dt, game) {
       updatePlayerEntity(this, game, dt);
@@ -262,8 +269,8 @@ function createPlayer(x, y, team, number, isGK = false) {
   return player;
 }
 
-/** Inicializa un equipo con coordenadas base únicas por jugador */
-function initializePlayers(team) {
+/** Inicializa un equipo (formación 1-4-1) con coordenadas base únicas */
+function initializeTeam(team) {
   return getFormationSlots(team).map((slot, i) => {
     const player = createPlayer(slot.x, slot.y, team, i + 1, slot.isGK);
     player.baseX = slot.x;
@@ -285,19 +292,21 @@ function clampPlayerSpeed(p, maxSpeed) {
   }
 }
 
-function applyLerpSteering(player, targetX, targetY, lerpFactor) {
+/** Movimiento unificado hacia un objetivo con suavizado lerp */
+function movePlayer(player, targetX, targetY, lerpFactor, maxSpeed) {
   const nx = lerp(player.x, targetX, lerpFactor);
   const ny = lerp(player.y, targetY, lerpFactor);
-  player.vx += (nx - player.x) * 0.14;
-  player.vy += (ny - player.y) * 0.14;
+  player.vx += (nx - player.x) * 0.24;
+  player.vy += (ny - player.y) * 0.24;
   const dx = targetX - player.x;
   const dy = targetY - player.y;
   if (Math.hypot(dx, dy) > 2) player.aimAngle = Math.atan2(dy, dx);
+  clampPlayerSpeed(player, maxSpeed);
 }
 
 function applyJitter(player) {
-  player.vx += (Math.random() - 0.5) * 0.4;
-  player.vy += (Math.random() - 0.5) * 0.4;
+  player.vx += (Math.random() - 0.5) * 1.2;
+  player.vy += (Math.random() - 0.5) * 1.2;
 }
 
 function getGoalkeeperTarget(player, ball) {
@@ -314,37 +323,98 @@ function getGoalkeeperTarget(player, ball) {
   };
 }
 
-function computeMoveTarget(player, g) {
-  const { ball, allPlayers } = g;
-  if (player.isGK) return getGoalkeeperTarget(player, ball);
-
-  let tx = player.baseX;
-  let ty = player.baseY;
-  const ballDist = dist(player, ball);
+/** Posición táctica desplazada hacia el lado del balón */
+function getTacticalBase(player, ball) {
   const ballShift = clamp((ball.x - FIELD.w / 2) / (FIELD.w / 2), -1, 1);
-  const push = (player.team === 'home' ? 1 : -1) * ballShift * 45;
-  tx += push * (player.role === 'mid' ? 0.75 : 0.4);
-  ty += ballShift * 18 * (player.role === 'def' ? 0.5 : 1);
+  const forward = player.team === 'home' ? 1 : -1;
+  const rolePull = player.role === 'mid' ? 110 : player.role === 'def' ? 50 : 0;
+  return {
+    x: player.baseX + forward * ballShift * rolePull * 0.5,
+    y: player.baseY + ballShift * 40 * (player.role === 'def' ? 0.45 : 0.75)
+  };
+}
 
-  if (ballDist < AI_CHASE_DIST) {
-    const w = (1 - ballDist / AI_CHASE_DIST) * 0.55;
-    let bx = ball.x;
-    let by = ball.y;
-    if (ball.owner && ball.owner.team !== player.team) {
-      const obstacles = allPlayers.filter((p) => p !== player);
-      if (!lineOfSight(player.x, player.y, ball.x, ball.y, obstacles, PLAYER_R)) {
-        bx = ball.owner.x;
-        by = ball.owner.y;
-      }
+function getChaseTarget(player, g) {
+  const { ball, allPlayers } = g;
+  let tx = ball.x;
+  let ty = ball.y;
+
+  if (ball.owner && ball.owner.team !== player.team) {
+    const obstacles = allPlayers.filter((p) => p !== player);
+    if (!lineOfSight(player.x, player.y, ball.x, ball.y, obstacles, PLAYER_R)) {
+      tx = ball.owner.x;
+      ty = ball.owner.y;
     }
-    tx = lerp(tx, bx, w);
-    ty = lerp(ty, by, w);
-  } else if (ballDist < AI_TACTICAL_DIST && !ball.owner) {
-    tx = lerp(tx, ball.x, 0.3);
-    ty = lerp(ty, ball.y, 0.3);
+  } else if (ball.owner && ball.owner.team === player.team && ball.owner !== player) {
+    const dir = player.team === 'home' ? 1 : -1;
+    tx = ball.owner.x + dir * 70;
+    ty = ball.owner.y + (player.number % 2 === 0 ? 45 : -45);
   }
 
   return { x: tx, y: ty };
+}
+
+/** Asigna hasta 2 presionadores por equipo (los más cercanos al balón) */
+function assignPressers(players, ball) {
+  const pressers = new Set();
+  const candidates = players
+    .filter((p) => !p.isGK && !p.isActive)
+    .sort((a, b) => dist(a, ball) - dist(b, ball));
+
+  for (let i = 0; i < Math.min(AI_MAX_PRESSERS, candidates.length); i++) {
+    if (dist(candidates[i], ball) < AI_CHASE_RADIUS * 2) {
+      pressers.add(candidates[i]);
+    }
+  }
+  return pressers;
+}
+
+function resolveAIState(player, g, pressers, dt) {
+  if (player.isGK) return AI_STATE.TACTICAL;
+
+  const moved = Math.hypot(player.x - player.lastX, player.y - player.lastY);
+  if (moved < 1.5) {
+    player.stuckTimer += dt;
+  } else {
+    player.stuckTimer = 0;
+  }
+  player.lastX = player.x;
+  player.lastY = player.y;
+
+  if (player.stuckTimer >= AI_STUCK_SECONDS) return AI_STATE.JITTER;
+
+  const ballDist = dist(player, g.ball);
+  if (pressers.has(player) || ballDist < AI_CHASE_RADIUS) return AI_STATE.CHASE;
+
+  return AI_STATE.TACTICAL;
+}
+
+function updateAIMovement(player, g, dt, pressers, maxSpeed) {
+  if (player.isGK) {
+    const t = getGoalkeeperTarget(player, g.ball);
+    movePlayer(player, t.x, t.y, MOVE_LERP_TACTICAL, maxSpeed * 0.88);
+    return;
+  }
+
+  const state = resolveAIState(player, g, pressers, dt);
+  player.aiState = state;
+
+  if (state === AI_STATE.JITTER) {
+    applyJitter(player);
+    player.stuckTimer = 0;
+    const base = getTacticalBase(player, g.ball);
+    movePlayer(player, base.x, base.y, MOVE_LERP_TACTICAL * 0.6, maxSpeed * 0.65);
+    return;
+  }
+
+  if (state === AI_STATE.CHASE) {
+    const t = getChaseTarget(player, g);
+    movePlayer(player, t.x, t.y, MOVE_LERP_CHASE, maxSpeed);
+    return;
+  }
+
+  const base = getTacticalBase(player, g.ball);
+  movePlayer(player, base.x, base.y, MOVE_LERP_TACTICAL, maxSpeed * 0.9);
 }
 
 function updateAwayBallCarrier(player, g) {
@@ -361,15 +431,7 @@ function updateAwayBallCarrier(player, g) {
     g.aiShootCooldown = 60;
     return;
   }
-  applyLerpSteering(player, goalX + 60, goalY, LERP_CHASE * 1.4);
-  clampPlayerSpeed(player, AI_SPEED);
-}
-
-function updateAutoMovement(player, g, maxSpeed) {
-  const target = computeMoveTarget(player, g);
-  const lerpF = dist(player, g.ball) < AI_CHASE_DIST ? LERP_CHASE : LERP_BASE;
-  applyLerpSteering(player, target.x, target.y, lerpF);
-  clampPlayerSpeed(player, maxSpeed);
+  movePlayer(player, goalX + 60, goalY, MOVE_LERP_CHASE, AI_SPEED);
 }
 
 function updatePlayerEntity(player, g, dt) {
@@ -383,17 +445,13 @@ function updatePlayerEntity(player, g, dt) {
       player.aimAngle = Math.atan2(move.y, move.x);
     }
     clampPlayerSpeed(player, PLAYER_SPEED);
+    player.stuckTimer = 0;
   } else if (player.team === 'away' && g.ball.owner === player) {
     updateAwayBallCarrier(player, g);
   } else {
-    const maxSpd = player.team === 'home' ? PLAYER_SPEED * 0.9 : AI_SPEED;
-    updateAutoMovement(player, g, maxSpd);
-  }
-
-  player.jitterTimer = (player.jitterTimer || 0) + dt;
-  if (player.jitterTimer >= 0.35 + Math.random() * 0.15) {
-    applyJitter(player);
-    player.jitterTimer = 0;
+    const pressers = player.team === 'home' ? g.pressersHome : g.pressersAway;
+    const maxSpd = player.team === 'home' ? PLAYER_SPEED * 0.92 : AI_SPEED;
+    updateAIMovement(player, g, dt, pressers, maxSpd);
   }
 
   player.vx *= FRICTION;
@@ -403,15 +461,16 @@ function updatePlayerEntity(player, g, dt) {
   resolvePlayerWall(player);
 }
 
-function updateAIPassIntercept(g) {
-  const { ball, awayPlayers, allPlayers } = g;
+function updatePassIntercept(g) {
+  const { ball, allPlayers } = g;
   if (ball.owner !== null || Math.hypot(ball.vx, ball.vy) <= 3) return;
 
-  for (const ai of awayPlayers) {
-    if (dist(ai, ball) < POSSESS_DIST + 10) {
-      const obstacles = allPlayers.filter((p) => p !== ai);
-      if (lineOfSight(ai.x, ai.y, ball.x + ball.vx * 5, ball.y + ball.vy * 5, obstacles, PLAYER_R)) {
-        applyLerpSteering(ai, ball.x, ball.y, LERP_CHASE * 1.5);
+  for (const p of allPlayers) {
+    if (p.isGK || p.isActive) continue;
+    if (dist(p, ball) < AI_CHASE_RADIUS) {
+      const obstacles = allPlayers.filter((o) => o !== p);
+      if (lineOfSight(p.x, p.y, ball.x + ball.vx * 4, ball.y + ball.vy * 4, obstacles, PLAYER_R)) {
+        movePlayer(p, ball.x, ball.y, MOVE_LERP_CHASE * 1.2, AI_SPEED * 1.05);
       }
     }
   }
@@ -834,8 +893,8 @@ function resetAfterGoal(g, scorer) {
   g.ball.releaseImmunity = 0;
   g.goalPause = 90; // ~1.5s a 60fps
 
-  g.homePlayers = initializePlayers('home');
-  g.awayPlayers = initializePlayers('away');
+  g.homePlayers = initializeTeam('home');
+  g.awayPlayers = initializeTeam('away');
   g.homePlayers[2].isActive = true;
   syncAllPlayers(g);
   updateHUD(g);
@@ -860,8 +919,8 @@ class Match {
     this.bPressed = false;
     this.aiShootCooldown = 0;
 
-    this.homePlayers = initializePlayers('home');
-    this.awayPlayers = initializePlayers('away');
+    this.homePlayers = initializeTeam('home');
+    this.awayPlayers = initializeTeam('away');
     this.ball = createBall();
 
     this.homePlayers[2].isActive = true;
@@ -933,8 +992,10 @@ class Match {
     if (this.aiShootCooldown > 0) this.aiShootCooldown--;
 
     const allPlayers = syncAllPlayers(this);
+    this.pressersHome = assignPressers(this.homePlayers, this.ball);
+    this.pressersAway = assignPressers(this.awayPlayers, this.ball);
     allPlayers.forEach((player) => player.update(dt, this));
-    updateAIPassIntercept(this);
+    updatePassIntercept(this);
 
     const active = this.activePlayer;
 

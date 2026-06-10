@@ -124,9 +124,20 @@
           </div>
         </div>
 
-        <!-- Hint de controles PC -->
-        <div id="pc-hint" class="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gstore-muted/70 bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm">
-          WASD · J = Pase · K = Tiro
+        <!-- Ayuda de controles -->
+        <div id="mobile-hint" class="game-help game-help-mobile" aria-live="polite">
+          <span>D-Pad · Mover</span>
+          <span class="help-sep">|</span>
+          <span><strong class="text-gstore-accent">A</strong> Pase / Cambio</span>
+          <span class="help-sep">|</span>
+          <span><strong class="text-gstore-accent">B</strong> Tiro / Robo</span>
+        </div>
+        <div id="pc-hint" class="game-help game-help-desktop" aria-live="polite">
+          <span>WASD · Mover</span>
+          <span class="help-sep">|</span>
+          <span><strong class="text-gstore-accent">J</strong> Pase</span>
+          <span class="help-sep">|</span>
+          <span><strong class="text-gstore-accent">K</strong> Tiro</span>
         </div>
       </div>
     </section>
