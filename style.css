@@ -6,9 +6,9 @@
   --gstore-orange: #ec7700;
   --gstore-orange-dark: #c76500;
   /* Móvil: táctil cómodo sin tapar demasiada cancha */
-  --dpad-cell: clamp(2.25rem, 9vw, 2.9rem);
+  --dpad-cell: clamp(50px, 15vw, 80px);
   --dpad-gap: clamp(0.15rem, 1vw, 0.3rem);
-  --action-size: clamp(2.85rem, 11vw, 3.6rem);
+  --action-size: clamp(50px, 15vw, 80px);
   --action-gap: clamp(0.5rem, 3vw, 0.9rem);
   --touch-pad: clamp(0.35rem, 1.5vw, 0.65rem);
   --hud-team-name: clamp(0.75rem, 2.8vw, 0.95rem);
@@ -423,6 +423,8 @@ body,
 }
 
 .dpad-btn {
+  width: clamp(50px, 15vw, 80px);
+  height: clamp(50px, 15vw, 80px);
   background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(6px);
   border: 2px solid rgba(166, 166, 166, 0.65);
@@ -450,8 +452,8 @@ body,
 .dpad-btn[data-dir="right"] { grid-column: 3; grid-row: 2; }
 
 .action-btn {
-  width: var(--action-size);
-  height: var(--action-size);
+  width: clamp(50px, 15vw, 80px);
+  height: clamp(50px, 15vw, 80px);
   border-radius: 50%;
   font-family: 'Kanit', 'Oswald', sans-serif;
   font-style: italic;
@@ -487,9 +489,9 @@ body,
 /* Escritorio: UI y controles al 120% del tamaño móvil base */
 @media (min-width: 1024px) {
   :root {
-    --dpad-cell: clamp(2.7rem, 3.2vw, 3.5rem);
+    --dpad-cell: clamp(50px, 15vw, 80px);
     --dpad-gap: clamp(0.2rem, 0.35vw, 0.4rem);
-    --action-size: clamp(3.4rem, 3.8vw, 4.3rem);
+    --action-size: clamp(50px, 15vw, 80px);
     --action-gap: clamp(0.65rem, 1.2vw, 1.1rem);
     --touch-pad: clamp(0.55rem, 1vw, 0.85rem);
     --hud-team-name: clamp(0.95rem, 1.1vw, 1.15rem);

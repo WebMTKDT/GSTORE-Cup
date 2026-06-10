@@ -15,7 +15,7 @@ const initialStores = [
 ];
 
 const STORAGE_KEY = 'gstoreCupLeaderboard';
-const MATCH_DURATION = 180; // 3:00 en segundos
+const GAME_DURATION = 120; // 2 minutos
 
 // Dimensiones lógicas del canvas (se escalan al contenedor)
 const FIELD = { w: 1400, h: 800 };
@@ -31,6 +31,7 @@ const SHOOT_BASE = 16;
 const SHOOT_MAX = 28;
 const TACKLE_FORCE = 8;
 const TACKLE_RANGE = 42;
+const TACKLE_EASY_RANGE = 60;
 const POSSESS_DIST = PLAYER_R + BALL_R + 4;
 const INTERCEPT_RANGE = 120;
 const AI_CHASE_RADIUS = 200;
@@ -227,18 +228,16 @@ function updateSelectionUI() {
 // ENTIDADES DEL JUEGO
 // ═══════════════════════════════════════════
 
-/** Slots únicos por equipo — evita amontonamiento en esquinas */
+/** Formación 1-4-1 (5v5): 1 portero + 4 en línea + punta — coords fijas únicas */
 function getFormationSlots(team) {
   const isHome = team === 'home';
-  const gkX = isHome ? 88 : FIELD.w - 88;
-  const lineDef = isHome ? 265 : FIELD.w - 265;
-  const lineMid = isHome ? 425 : FIELD.w - 425;
+  const mx = (x) => (isHome ? x : FIELD.w - x);
   return [
-    { x: gkX, y: FIELD.h * 0.5, isGK: true, role: 'gk' },
-    { x: lineDef, y: FIELD.h * 0.22, isGK: false, role: 'def' },
-    { x: lineDef, y: FIELD.h * 0.78, isGK: false, role: 'def' },
-    { x: lineMid, y: FIELD.h * 0.36, isGK: false, role: 'mid' },
-    { x: lineMid, y: FIELD.h * 0.64, isGK: false, role: 'mid' }
+    { x: mx(85), y: FIELD.h * 0.5, isGK: true, role: 'gk' },
+    { x: mx(240), y: FIELD.h * 0.14, isGK: false, role: 'def' },
+    { x: mx(260), y: FIELD.h * 0.36, isGK: false, role: 'def' },
+    { x: mx(260), y: FIELD.h * 0.64, isGK: false, role: 'def' },
+    { x: mx(420), y: FIELD.h * 0.5, isGK: false, role: 'fwd' }
   ];
 }
 
@@ -256,7 +255,7 @@ function createPlayer(x, y, team, number, isGK = false) {
     baseY: y,
     role: 'mid',
     jitterTimer: Math.random() * 0.3,
-    gkHoldTimer: 0,
+    retentionTimer: 0,
     stuckTimer: 0,
     lastX: x,
     lastY: y,
@@ -269,8 +268,8 @@ function createPlayer(x, y, team, number, isGK = false) {
   return player;
 }
 
-/** Inicializa un equipo (formación 1-4-1) con coordenadas base únicas */
-function initializeTeam(team) {
+/** Inicializa un equipo con posiciones fijas (formación 1-4-1) */
+function initializePlayers(team) {
   return getFormationSlots(team).map((slot, i) => {
     const player = createPlayer(slot.x, slot.y, team, i + 1, slot.isGK);
     player.baseX = slot.x;
@@ -327,7 +326,7 @@ function getGoalkeeperTarget(player, ball) {
 function getTacticalBase(player, ball) {
   const ballShift = clamp((ball.x - FIELD.w / 2) / (FIELD.w / 2), -1, 1);
   const forward = player.team === 'home' ? 1 : -1;
-  const rolePull = player.role === 'mid' ? 110 : player.role === 'def' ? 50 : 0;
+  const rolePull = player.role === 'fwd' ? 140 : player.role === 'mid' ? 110 : player.role === 'def' ? 50 : 0;
   return {
     x: player.baseX + forward * ballShift * rolePull * 0.5,
     y: player.baseY + ballShift * 40 * (player.role === 'def' ? 0.45 : 0.75)
@@ -414,7 +413,13 @@ function updateAIMovement(player, g, dt, pressers, maxSpeed) {
   }
 
   const base = getTacticalBase(player, g.ball);
-  movePlayer(player, base.x, base.y, MOVE_LERP_TACTICAL, maxSpeed * 0.9);
+  movePlayer(
+    player,
+    base.x + (Math.random() - 0.5) * 0.2,
+    base.y + (Math.random() - 0.5) * 0.2,
+    MOVE_LERP_TACTICAL,
+    maxSpeed * 0.9
+  );
 }
 
 function updateAwayBallCarrier(player, g) {
@@ -459,6 +464,9 @@ function updatePlayerEntity(player, g, dt) {
   player.x += player.vx;
   player.y += player.vy;
   resolvePlayerWall(player);
+
+  if (player.x < PLAYER_R + 2) player.vx = 0.5;
+  if (player.x > FIELD.w - PLAYER_R - 2) player.vx = -0.5;
 }
 
 function updatePassIntercept(g) {
@@ -665,7 +673,7 @@ function updatePossession(g) {
 
   if (closest && Math.hypot(ball.vx, ball.vy) < 6) {
     if (prevOwner !== closest && closest.isGK) {
-      closest.gkHoldTimer = 0;
+      closest.retentionTimer = 0;
     }
     ball.owner = closest;
     const angle = closest.aimAngle;
@@ -677,7 +685,7 @@ function updatePossession(g) {
   }
 }
 
-function findNearestTeammate(player, teammates) {
+function findClosestTeammate(player, teammates) {
   let best = null;
   let bestDist = Infinity;
   for (const tm of teammates) {
@@ -705,11 +713,10 @@ function launchBallToward(ball, fromX, fromY, targetX, targetY, speed) {
 
 function releaseGoalkeeperBall(g, gk) {
   const teammates = g.allPlayers.filter((p) => p.team === gk.team && p !== gk);
-  const nearest = findNearestTeammate(gk, teammates);
-  const nearEnough = nearest && dist(gk, nearest) < 420;
+  const target = findClosestTeammate(gk, teammates);
 
-  if (nearEnough) {
-    launchBallToward(g.ball, gk.x, gk.y, nearest.x, nearest.y, PASS_FORCE);
+  if (target) {
+    launchBallToward(g.ball, gk.x, gk.y, target.x, target.y, PASS_FORCE);
   } else {
     const forward = gk.team === 'home' ? 1 : -1;
     g.ball.owner = null;
@@ -719,16 +726,17 @@ function releaseGoalkeeperBall(g, gk) {
     g.ball.vx = forward * PASS_FORCE * 1.15;
     g.ball.vy = (Math.random() - 0.5) * 3;
   }
-  gk.gkHoldTimer = 0;
+  gk.retentionTimer = 0;
 }
 
 function updateGoalkeeperLogic(g, dt) {
-  const owner = g.ball.owner;
-  if (!owner?.isGK) return;
+  for (const p of g.allPlayers) {
+    if (!p.isGK || g.ball.owner !== p) continue;
 
-  owner.gkHoldTimer += dt;
-  if (owner.gkHoldTimer >= GK_HOLD_TIME) {
-    releaseGoalkeeperBall(g, owner);
+    p.retentionTimer += dt;
+    if (p.retentionTimer >= GK_HOLD_TIME) {
+      releaseGoalkeeperBall(g, p);
+    }
   }
 }
 
@@ -773,7 +781,7 @@ function findPassTarget(active, teammates, aimAngle) {
 function doPass(g, player) {
   const teammates = g.homePlayers.filter((p) => p !== player);
   let target = findPassTarget(player, teammates, player.aimAngle);
-  if (!target) target = findNearestTeammate(player, teammates);
+  if (!target) target = findClosestTeammate(player, teammates);
 
   if (target) {
     launchBallToward(g.ball, player.x, player.y, target.x, target.y, PASS_FORCE);
@@ -786,7 +794,7 @@ function doPass(g, player) {
     g.ball.vx = Math.cos(angle) * PASS_FORCE;
     g.ball.vy = Math.sin(angle) * PASS_FORCE;
   }
-  if (player.isGK) player.gkHoldTimer = 0;
+  if (player.isGK) player.retentionTimer = 0;
   g.actionCooldown = 15;
 }
 
@@ -835,8 +843,11 @@ function doTackle(g, player) {
   player.vx += Math.cos(dashAngle) * TACKLE_FORCE;
   player.vy += Math.sin(dashAngle) * TACKLE_FORCE;
 
-  // Robar si hay rival cercano con balón
-  if (g.ball.owner && g.ball.owner.team === 'away') {
+  if (dist(player, g.ball) < TACKLE_EASY_RANGE) {
+    g.ball.owner = null;
+    g.ball.vx = player.x > g.ball.x ? -5 : 5;
+    g.ball.releaseImmunity = BALL_RELEASE_IMMUNITY;
+  } else if (g.ball.owner && g.ball.owner.team === 'away') {
     const d = dist(player, g.ball.owner);
     if (d < TACKLE_RANGE) {
       g.ball.owner = null;
@@ -893,8 +904,8 @@ function resetAfterGoal(g, scorer) {
   g.ball.releaseImmunity = 0;
   g.goalPause = 90; // ~1.5s a 60fps
 
-  g.homePlayers = initializeTeam('home');
-  g.awayPlayers = initializeTeam('away');
+  g.homePlayers = initializePlayers('home');
+  g.awayPlayers = initializePlayers('away');
   g.homePlayers[2].isActive = true;
   syncAllPlayers(g);
   updateHUD(g);
@@ -910,7 +921,7 @@ class Match {
     this.awayName = awayName;
     this.homeScore = 0;
     this.awayScore = 0;
-    this.timeLeft = MATCH_DURATION;
+    this.timeLeft = GAME_DURATION;
     this.lastTimestamp = 0;
     this.running = false;
     this.goalPause = 0;
@@ -919,8 +930,8 @@ class Match {
     this.bPressed = false;
     this.aiShootCooldown = 0;
 
-    this.homePlayers = initializeTeam('home');
-    this.awayPlayers = initializeTeam('away');
+    this.homePlayers = initializePlayers('home');
+    this.awayPlayers = initializePlayers('away');
     this.ball = createBall();
 
     this.homePlayers[2].isActive = true;
@@ -1256,7 +1267,7 @@ function updateHUD(g) {
 function updateTimerDisplay(seconds) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  $('#hud-timer').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  $('#hud-timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function renderLeaderboardTable({ showResult = false, homeGoals = 0, awayGoals = 0 } = {}) {
