@@ -7,7 +7,7 @@
 // CONFIGURACIÓN Y CONSTANTES
 // ═══════════════════════════════════════════
 
-const GSTORE_BRANCHES = [
+const initialStores = [
   'GSTORE Tijuana',
   'GSTORE San Diego',
   'GSTORE Monterrey',
@@ -33,6 +33,9 @@ const TACKLE_FORCE = 8;
 const TACKLE_RANGE = 42;
 const POSSESS_DIST = PLAYER_R + BALL_R + 4;
 const INTERCEPT_RANGE = 120;
+const AI_CHASE_DIST = 180;
+const AI_TACTICAL_DIST = 320;
+const AI_STUCK_SECONDS = 2;
 
 // Colores de cancha
 const COLORS = {
@@ -79,7 +82,7 @@ const views = {
 
 function defaultLeaderboard() {
   const data = {};
-  GSTORE_BRANCHES.forEach((b) => { data[b] = { points: 0 }; });
+  initialStores.forEach((b) => { data[b] = { points: 0 }; });
   return data;
 }
 
@@ -90,7 +93,7 @@ function loadLeaderboard() {
     const parsed = JSON.parse(raw);
     // Asegurar que todas las sucursales existan
     const data = defaultLeaderboard();
-    GSTORE_BRANCHES.forEach((b) => {
+    initialStores.forEach((b) => {
       if (parsed[b]) data[b].points = parsed[b].points || 0;
     });
     return data;
@@ -135,28 +138,30 @@ function showView(name) {
 // PANTALLA DE SELECCIÓN
 // ═══════════════════════════════════════════
 
-function renderSelectionGrids() {
-  const gridLocal = $('#grid-local');
-  const gridAway = $('#grid-away');
-  gridLocal.innerHTML = '';
-  gridAway.innerHTML = '';
+function renderSelectionLists() {
+  const listLocal = $('#list-local');
+  const listAway = $('#list-away');
+  listLocal.innerHTML = '';
+  listAway.innerHTML = '';
 
-  GSTORE_BRANCHES.forEach((branch) => {
-    const btnLocal = createBranchButton(branch, 'local');
-    const btnAway = createBranchButton(branch, 'away');
-    gridLocal.appendChild(btnLocal);
-    gridAway.appendChild(btnAway);
+  initialStores.forEach((store) => {
+    listLocal.appendChild(createStoreRow(store, 'local'));
+    listAway.appendChild(createStoreRow(store, 'away'));
   });
 }
 
-function createBranchButton(branch, side) {
-  const btn = document.createElement('button');
-  btn.className = 'branch-btn';
-  btn.textContent = branch.replace('GSTORE ', '');
-  btn.dataset.branch = branch;
-  btn.dataset.side = side;
-  btn.addEventListener('click', () => selectBranch(branch, side));
-  return btn;
+function createStoreRow(store, side) {
+  const li = document.createElement('li');
+  li.className = 'store-row';
+  li.dataset.branch = store;
+  li.dataset.side = side;
+  li.setAttribute('role', 'option');
+  li.innerHTML = `
+    <span class="store-radio" aria-hidden="true"></span>
+    <span class="store-name">${store}</span>
+  `;
+  li.addEventListener('click', () => selectBranch(store, side));
+  return li;
 }
 
 function selectBranch(branch, side) {
@@ -171,17 +176,24 @@ function selectBranch(branch, side) {
 }
 
 function updateSelectionUI() {
-  $$('.branch-btn').forEach((btn) => {
-    const b = btn.dataset.branch;
-    const side = btn.dataset.side;
-    btn.classList.remove('selected-local', 'selected-away', 'disabled-branch');
+  $$('.store-row').forEach((row) => {
+    const b = row.dataset.branch;
+    const side = row.dataset.side;
+    row.classList.remove('selected-local', 'selected-away', 'disabled-row');
+    row.setAttribute('aria-selected', 'false');
 
     if (side === 'local') {
-      if (b === AppState.homeTeam) btn.classList.add('selected-local');
-      if (b === AppState.awayTeam) btn.classList.add('disabled-branch');
+      if (b === AppState.homeTeam) {
+        row.classList.add('selected-local');
+        row.setAttribute('aria-selected', 'true');
+      }
+      if (b === AppState.awayTeam) row.classList.add('disabled-row');
     } else {
-      if (b === AppState.awayTeam) btn.classList.add('selected-away');
-      if (b === AppState.homeTeam) btn.classList.add('disabled-branch');
+      if (b === AppState.awayTeam) {
+        row.classList.add('selected-away');
+        row.setAttribute('aria-selected', 'true');
+      }
+      if (b === AppState.homeTeam) row.classList.add('disabled-row');
     }
   });
 
@@ -215,7 +227,10 @@ function createPlayer(x, y, team, number, isGK = false) {
     isGK,
     isActive: false,
     tackleCooldown: 0,
-    aimAngle: team === 'home' ? 0 : Math.PI
+    aimAngle: team === 'home' ? 0 : Math.PI,
+    lastX: x,
+    lastY: y,
+    stuckTimer: 0
   };
 }
 
@@ -345,9 +360,9 @@ function lineOfSight(x1, y1, x2, y2, obstacles, radius) {
 }
 
 function resolvePlayerWall(p) {
-  const pad = PLAYER_R;
-  p.x = clamp(p.x, GOAL.w + pad, FIELD.w - GOAL.w - pad);
-  p.y = clamp(p.y, pad, FIELD.h - pad);
+  const r = PLAYER_R;
+  p.x = clamp(p.x, GOAL.w + r, FIELD.w - GOAL.w - r);
+  p.y = clamp(p.y, r, FIELD.h - r);
 }
 
 function resolveBallWall(ball) {
@@ -551,7 +566,63 @@ function doTackle(g, player) {
 // INTELIGENCIA ARTIFICIAL
 // ═══════════════════════════════════════════
 
-function updateAI(g) {
+/** Posición táctica según rol: portero atrás, defensas retrasados, medios al centro */
+function getTacticalPosition(ai, awayPlayers, ball) {
+  const idx = awayPlayers.indexOf(ai);
+  const ballOnHomeHalf = ball.x < FIELD.w / 2;
+  const shift = ballOnHomeHalf ? -40 : 60;
+
+  if (ai.isGK) {
+    return {
+      x: FIELD.w - 75,
+      y: clamp(FIELD.h / 2 + (ball.y - FIELD.h / 2) * 0.35, PLAYER_R + 20, FIELD.h - PLAYER_R - 20)
+    };
+  }
+
+  // Defensas (índices 1 y 2)
+  if (idx === 1 || idx === 2) {
+    return {
+      x: FIELD.w - 260 + shift * 0.3,
+      y: idx === 1 ? FIELD.h * 0.28 : FIELD.h * 0.72
+    };
+  }
+
+  // Mediocampistas (índices 3 y 4)
+  return {
+    x: FIELD.w - 400 + shift * 0.5,
+    y: idx === 3 ? FIELD.h * 0.42 : FIELD.h * 0.58
+  };
+}
+
+function applyAIMovement(ai, targetX, targetY, accel) {
+  const dx = targetX - ai.x;
+  const dy = targetY - ai.y;
+  const d = Math.hypot(dx, dy) || 1;
+  if (d > 4) {
+    ai.vx += (dx / d) * accel;
+    ai.vy += (dy / d) * accel;
+    ai.aimAngle = Math.atan2(dy, dx);
+  }
+}
+
+function updateAIStuck(ai, dt) {
+  const moved = Math.hypot(ai.x - ai.lastX, ai.y - ai.lastY);
+  if (moved < 1.5) {
+    ai.stuckTimer += dt;
+  } else {
+    ai.stuckTimer = 0;
+  }
+  ai.lastX = ai.x;
+  ai.lastY = ai.y;
+
+  if (ai.stuckTimer >= AI_STUCK_SECONDS) {
+    ai.vx += (Math.random() - 0.5) * 2.5;
+    ai.vy += (Math.random() - 0.5) * 2.5;
+    ai.stuckTimer = 0;
+  }
+}
+
+function updateAI(g, dt) {
   const { ball, awayPlayers, homePlayers, allPlayers } = g;
   const midfield = FIELD.w / 2;
 
@@ -559,26 +630,17 @@ function updateAI(g) {
     if (ai.tackleCooldown > 0) ai.tackleCooldown--;
 
     let targetX, targetY;
+    const ballDist = dist(ai, ball);
     const hasBall = ball.owner === ai;
     const homeHasBall = ball.owner && ball.owner.team === 'home';
 
     if (hasBall) {
-      // Con balón: avanzar y disparar si cruza medio campo
       const goalX = 0;
       const goalY = FIELD.h / 2;
       targetX = goalX + 60;
       targetY = goalY;
 
-      if (ai.x < midfield + 80) {
-        // Avanzar con balón
-        const dx = targetX - ai.x;
-        const dy = targetY - ai.y;
-        const d = Math.hypot(dx, dy) || 1;
-        ai.vx += (dx / d) * 0.5;
-        ai.vy += (dy / d) * 0.5;
-        ai.aimAngle = Math.atan2(dy, dx);
-      } else {
-        // Oportunidad de disparo
+      if (ai.x > midfield - 60 && g.aiShootCooldown <= 0) {
         const dx = goalX - ai.x;
         const dy = goalY - ai.y;
         const d = Math.hypot(dx, dy) || 1;
@@ -586,52 +648,36 @@ function updateAI(g) {
         ball.vx = (dx / d) * (SHOOT_BASE + 4);
         ball.vy = (dy / d) * (SHOOT_BASE + 4);
         g.aiShootCooldown = 60;
+      } else {
+        applyAIMovement(ai, targetX, targetY, 0.55);
       }
-    } else if (homeHasBall) {
-      // Defensa: perseguir portador o interceptar
-      const carrier = ball.owner;
-      const obstacles = allPlayers.filter((p) => p !== ai);
-      const canIntercept = lineOfSight(ai.x, ai.y, ball.x, ball.y, obstacles, PLAYER_R);
+    } else if (ballDist < AI_CHASE_DIST) {
+      // Cerca del balón: persecución activa
+      targetX = ball.x;
+      targetY = ball.y;
 
-      if (canIntercept && dist(ai, ball) < INTERCEPT_RANGE) {
-        targetX = ball.x;
-        targetY = ball.y;
-      } else {
-        targetX = carrier.x;
-        targetY = carrier.y;
-      }
-    } else {
-      // Balón libre: ir al balón o posición táctica
-      if (dist(ai, ball) < 300) {
-        targetX = ball.x;
-        targetY = ball.y;
-      } else {
-        // Posición de formación espejo
-        const homeIdx = awayPlayers.indexOf(ai);
-        const homeMirror = homePlayers[homeIdx];
-        if (homeMirror) {
-          targetX = FIELD.w - homeMirror.x;
-          targetY = homeMirror.y;
+      if (homeHasBall) {
+        const carrier = ball.owner;
+        const obstacles = allPlayers.filter((p) => p !== ai);
+        if (lineOfSight(ai.x, ai.y, ball.x, ball.y, obstacles, PLAYER_R)) {
+          targetX = ball.x;
+          targetY = ball.y;
         } else {
-          targetX = ai.x;
-          targetY = ai.y;
+          targetX = carrier.x;
+          targetY = carrier.y;
         }
       }
-    }
 
-    const dx = targetX - ai.x;
-    const dy = targetY - ai.y;
-    const d = Math.hypot(dx, dy) || 1;
-    if (d > 5) {
-      ai.vx += (dx / d) * 0.45;
-      ai.vy += (dy / d) * 0.45;
-      ai.aimAngle = Math.atan2(dy, dx);
-    }
-
-    // Portero IA: quedarse cerca de portería
-    if (ai.isGK) {
-      ai.x = clamp(ai.x, FIELD.w - GOAL.w - 80, FIELD.w - 60);
-      ai.y += (ball.y - ai.y) * 0.04;
+      applyAIMovement(ai, targetX, targetY, 0.6);
+    } else if (ballDist < AI_TACTICAL_DIST && !ball.owner) {
+      // Balón libre a distancia media: acercarse
+      applyAIMovement(ai, ball.x, ball.y, 0.4);
+    } else {
+      // Balón lejos: posicionamiento táctico
+      const tactical = getTacticalPosition(ai, awayPlayers, ball);
+      targetX = tactical.x;
+      targetY = tactical.y;
+      applyAIMovement(ai, targetX, targetY, 0.35);
     }
 
     // Limitar velocidad IA
@@ -646,6 +692,7 @@ function updateAI(g) {
     ai.x += ai.vx;
     ai.y += ai.vy;
     resolvePlayerWall(ai);
+    updateAIStuck(ai, dt);
   }
 
   // Intercepción de pases en línea de visión
@@ -654,8 +701,7 @@ function updateAI(g) {
       if (dist(ai, ball) < POSSESS_DIST + 10) {
         const obstacles = allPlayers.filter((p) => p !== ai);
         if (lineOfSight(ai.x, ai.y, ball.x + ball.vx * 5, ball.y + ball.vy * 5, obstacles, PLAYER_R)) {
-          // IA intercepta
-          break;
+          applyAIMovement(ai, ball.x, ball.y, 0.7);
         }
       }
     }
@@ -835,7 +881,7 @@ class Match {
     }
 
     // IA visitante
-    updateAI(this);
+    updateAI(this, dt);
 
     // Colisiones jugador-jugador
     for (let i = 0; i < this.allPlayers.length; i++) {
@@ -1084,18 +1130,29 @@ function updateTimerDisplay(seconds) {
   $('#hud-timer').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function showLeaderboard(homeGoals, awayGoals) {
-  let resultText;
-  if (homeGoals > awayGoals) {
-    resultText = `¡Victoria de ${AppState.homeTeam}! (${homeGoals} - ${awayGoals})`;
-  } else if (awayGoals > homeGoals) {
-    resultText = `¡Victoria de ${AppState.awayTeam}! (${homeGoals} - ${awayGoals})`;
-  } else {
-    resultText = `Empate (${homeGoals} - ${awayGoals}) — Sin puntos`;
-  }
-  $('#match-result').textContent = resultText;
+function renderLeaderboardTable({ showResult = false, homeGoals = 0, awayGoals = 0 } = {}) {
+  const titleEl = $('#leaderboard-title');
+  const resultEl = $('#match-result');
 
-  const sorted = GSTORE_BRANCHES
+  if (showResult && AppState.homeTeam) {
+    titleEl.textContent = 'RESULTADO FINAL';
+    let resultText;
+    if (homeGoals > awayGoals) {
+      resultText = `¡Victoria de ${AppState.homeTeam}! (${homeGoals} - ${awayGoals})`;
+    } else if (awayGoals > homeGoals) {
+      resultText = `¡Victoria de ${AppState.awayTeam}! (${homeGoals} - ${awayGoals})`;
+    } else {
+      resultText = `Empate (${homeGoals} - ${awayGoals}) — Sin puntos`;
+    }
+    resultEl.textContent = resultText;
+    resultEl.classList.remove('hidden');
+  } else {
+    titleEl.textContent = 'TABLA DE POSICIONES';
+    resultEl.textContent = '';
+    resultEl.classList.add('hidden');
+  }
+
+  const sorted = initialStores
     .map((b) => ({ name: b, points: AppState.leaderboard[b].points }))
     .sort((a, b) => b.points - a.points);
 
@@ -1103,7 +1160,7 @@ function showLeaderboard(homeGoals, awayGoals) {
   tbody.innerHTML = '';
   sorted.forEach((entry, i) => {
     const tr = document.createElement('tr');
-    const isMatchTeam = entry.name === AppState.homeTeam || entry.name === AppState.awayTeam;
+    const isMatchTeam = showResult && (entry.name === AppState.homeTeam || entry.name === AppState.awayTeam);
     tr.className = `leaderboard-row${isMatchTeam ? ' highlight' : ''}`;
     tr.innerHTML = `
       <td class="py-3 pl-2 text-gstore-muted">${i + 1}</td>
@@ -1112,7 +1169,15 @@ function showLeaderboard(homeGoals, awayGoals) {
     `;
     tbody.appendChild(tr);
   });
+}
 
+function showLeaderboard(homeGoals, awayGoals) {
+  renderLeaderboardTable({ showResult: true, homeGoals, awayGoals });
+  showView('leaderboard');
+}
+
+function openLeaderboardFromMenu() {
+  renderLeaderboardTable({ showResult: false });
   showView('leaderboard');
 }
 
@@ -1123,13 +1188,17 @@ function showLeaderboard(homeGoals, awayGoals) {
 function init() {
   AppState.leaderboard = loadLeaderboard();
   Input.init();
-  renderSelectionGrids();
+  renderSelectionLists();
 
   $('#btn-play').addEventListener('click', () => {
     AppState.homeTeam = null;
     AppState.awayTeam = null;
     updateSelectionUI();
     showView('selection');
+  });
+
+  $('#btn-leaderboard').addEventListener('click', () => {
+    openLeaderboardFromMenu();
   });
 
   $('#btn-start-match').addEventListener('click', () => {

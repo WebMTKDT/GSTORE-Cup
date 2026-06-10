@@ -49,9 +49,14 @@
         </h2>
         <p class="text-gstore-muted text-lg sm:text-xl mt-4 tracking-wide">Fútbol Arcade 2D</p>
       </div>
-      <button id="btn-play" class="btn-primary text-2xl sm:text-3xl px-12 py-4 tracking-widest">
-        JUGAR
-      </button>
+      <div class="flex flex-col sm:flex-row gap-4 items-center">
+        <button id="btn-play" class="btn-primary text-2xl sm:text-3xl px-12 py-4 tracking-widest">
+          JUGAR
+        </button>
+        <button id="btn-leaderboard" class="btn-secondary text-xl sm:text-2xl px-10 py-3 tracking-widest">
+          VER POSICIONES
+        </button>
+      </div>
     </section>
 
     <!-- ═══ VISTA 2: SELECCIÓN ═══ -->
@@ -60,14 +65,14 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <!-- Local -->
-        <div class="panel-card p-4">
-          <h3 class="text-gstore-accent text-xl font-bold mb-3 tracking-wide">LOCAL</h3>
-          <div id="grid-local" class="grid grid-cols-2 gap-2"></div>
+        <div class="panel-card p-4 flex flex-col min-h-0">
+          <h3 class="text-gstore-accent text-xl font-bold mb-3 tracking-wide shrink-0">LOCAL</h3>
+          <ul id="list-local" class="store-list" role="listbox" aria-label="Equipo local"></ul>
         </div>
         <!-- Visitante -->
-        <div class="panel-card p-4">
-          <h3 class="text-gstore-muted text-xl font-bold mb-3 tracking-wide">VISITANTE</h3>
-          <div id="grid-away" class="grid grid-cols-2 gap-2"></div>
+        <div class="panel-card p-4 flex flex-col min-h-0">
+          <h3 class="text-gstore-muted text-xl font-bold mb-3 tracking-wide shrink-0">VISITANTE</h3>
+          <ul id="list-away" class="store-list" role="listbox" aria-label="Equipo visitante"></ul>
         </div>
       </div>
 
@@ -127,8 +132,8 @@
     <!-- ═══ VISTA 4: LEADERBOARD ═══ -->
     <section id="view-leaderboard" class="view hidden flex flex-col gap-6 py-8 px-4 sm:px-6">
       <div class="text-center">
-        <h2 class="text-3xl sm:text-4xl font-bold text-gstore-accent tracking-wide">RESULTADO FINAL</h2>
-        <p id="match-result" class="text-xl text-gstore-muted mt-2"></p>
+        <h2 id="leaderboard-title" class="text-3xl sm:text-4xl font-bold text-gstore-accent tracking-wide">TABLA DE POSICIONES</h2>
+        <p id="match-result" class="text-xl text-gstore-muted mt-2 hidden"></p>
       </div>
 
       <div class="panel-card p-4 sm:p-6 max-w-lg mx-auto w-full">
