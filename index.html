@@ -12,7 +12,7 @@
         extend: {
           colors: {
             gstore: {
-              base: '#333333',
+              base: '#0f172a',
               panel: '#4a4a4a',
               border: '#a6a6a6',
               muted: '#e6e6e6',
@@ -23,7 +23,7 @@
             }
           },
           fontFamily: {
-            arcade: ['Oswald', 'Arial Narrow', 'sans-serif'],
+            arcade: ['Kanit', 'Oswald', 'Arial Narrow', 'sans-serif'],
           }
         }
       }
@@ -34,7 +34,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@1,700;1,800;1,900&family=Oswald:ital,wght@1,400;1,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="bg-gstore-base text-white font-arcade italic min-h-screen flex items-center justify-center p-2 sm:p-4">
+<body class="app-body text-white font-arcade italic min-h-screen flex items-center justify-center p-2 sm:p-4">
 
   <div id="app" class="w-full max-w-[1200px] mx-auto">
 
@@ -67,7 +67,7 @@
 
     <!-- ═══ VISTA 2: SELECCIÓN ═══ -->
     <section id="view-selection" class="view hidden flex flex-col gap-6 py-8 px-4 sm:px-6">
-      <h2 class="text-3xl sm:text-4xl font-bold text-center text-white tracking-wide">ELIGE TU EQUIPO</h2>
+      <h2 class="ui-heading text-3xl sm:text-4xl font-bold text-center text-white tracking-wide">ELIGE TU EQUIPO</h2>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <!-- Local -->
@@ -113,7 +113,7 @@
         <!-- Controles móviles -->
         <div id="touch-controls" class="touch-controls absolute inset-0 pointer-events-none">
           <!-- D-Pad izquierda -->
-          <div class="absolute bottom-4 left-4 pointer-events-auto">
+          <div class="touch-zone touch-zone-left pointer-events-auto">
             <div class="dpad-grid">
               <button class="dpad-btn" data-dir="up" aria-label="Arriba">▲</button>
               <button class="dpad-btn" data-dir="left" aria-label="Izquierda">◀</button>
@@ -122,7 +122,7 @@
             </div>
           </div>
           <!-- Botones A/B derecha -->
-          <div class="absolute bottom-4 right-4 flex gap-4 pointer-events-auto">
+          <div class="touch-zone touch-zone-right pointer-events-auto">
             <button id="btn-touch-a" class="action-btn action-btn-a" aria-label="Botón A">A</button>
             <button id="btn-touch-b" class="action-btn action-btn-b" aria-label="Botón B">B</button>
           </div>

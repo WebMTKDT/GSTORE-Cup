@@ -2,14 +2,37 @@
    GSTORE CUP — Estilos complementarios
    ═══════════════════════════════════════════ */
 
+:root {
+  --gstore-orange: #ec7700;
+  --gstore-orange-dark: #c76500;
+  --dpad-cell: clamp(2.75rem, 12vw, 3.5rem);
+  --dpad-gap: clamp(0.2rem, 1.2vw, 0.35rem);
+  --action-size: clamp(3.5rem, 15vw, 4.5rem);
+  --action-gap: clamp(0.75rem, 4vw, 1.25rem);
+  --touch-pad: clamp(0.5rem, 2.5vw, 1rem);
+  --ui-text: clamp(0.875rem, 2.5vw, 1.125rem);
+  --ui-heading: clamp(1.5rem, 5vw, 2.25rem);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
+body,
+.app-body {
   overflow-x: hidden;
   touch-action: manipulation;
+  background: linear-gradient(165deg, #0f172a 0%, #1e293b 45%, #0f172a 100%);
+  min-height: 100vh;
+}
+
+.ui-heading {
+  font-family: 'Kanit', 'Oswald', sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
 }
 
 /* ── Pantalla de inicio — look Mundial ── */
@@ -35,10 +58,10 @@ body {
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.55) 0%,
-    rgba(0, 0, 0, 0.25) 35%,
-    rgba(51, 51, 51, 0.5) 65%,
-    rgba(51, 51, 51, 0.92) 100%
+    rgba(15, 23, 42, 0.65) 0%,
+    rgba(15, 23, 42, 0.35) 40%,
+    rgba(15, 23, 42, 0.55) 70%,
+    rgba(15, 23, 42, 0.95) 100%
   );
 }
 
@@ -51,6 +74,7 @@ body {
   font-style: italic;
   font-weight: 800;
   text-transform: uppercase;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
 }
 
 .start-title-mundial {
@@ -62,9 +86,8 @@ body {
   color: #ffffff;
   -webkit-text-stroke: 2px #000000;
   paint-order: stroke fill;
-  text-shadow:
-    4px 4px 0 #000000,
-    0 0 40px rgba(0, 0, 0, 0.8);
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.85));
+  text-shadow: 4px 4px 0 #000000;
 }
 
 .start-title-cup {
@@ -76,9 +99,8 @@ body {
   color: #ec7700;
   -webkit-text-stroke: 2px #000000;
   paint-order: stroke fill;
-  text-shadow:
-    4px 4px 0 #000000,
-    0 0 30px rgba(236, 119, 0, 0.45);
+  filter: drop-shadow(0 6px 14px rgba(236, 119, 0, 0.5));
+  text-shadow: 4px 4px 0 #000000;
 }
 
 .start-subtitle {
@@ -126,19 +148,22 @@ body {
 .btn-primary {
   background: linear-gradient(180deg, #ec7700 0%, #c76500 100%);
   color: #ffffff;
-  font-family: 'Oswald', sans-serif;
+  font-family: 'Kanit', 'Oswald', sans-serif;
   font-style: italic;
-  font-weight: 700;
+  font-weight: 800;
   border: 2px solid #a6a6a6;
   border-radius: 12px;
   cursor: pointer;
+  font-size: clamp(1rem, 2.8vw, 1.35rem);
   box-shadow: 0 4px 16px rgba(236, 119, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, filter 0.15s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: linear-gradient(180deg, #f08010 0%, #d06a00 100%);
   box-shadow: 0 6px 24px rgba(236, 119, 0, 0.55);
+  filter: drop-shadow(0 6px 14px rgba(236, 119, 0, 0.35));
 }
 
 .btn-primary:active:not(:disabled) {
@@ -153,13 +178,15 @@ body {
 .btn-secondary {
   background: #4a4a4a;
   color: #f7f7f7;
-  font-family: 'Oswald', sans-serif;
+  font-family: 'Kanit', 'Oswald', sans-serif;
   font-style: italic;
   font-weight: 700;
   border: 2px solid #a6a6a6;
   border-radius: 12px;
   cursor: pointer;
+  font-size: clamp(0.9rem, 2.4vw, 1.15rem);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -167,6 +194,7 @@ body {
   background: #555555;
   border-color: #e6e6e6;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.5));
 }
 
 .btn-secondary:active {
@@ -279,53 +307,53 @@ body {
   display: block;
 }
 
-/* ── Controles táctiles ── */
+/* ── Controles táctiles (móvil grande · escritorio 60%) ── */
 .touch-controls {
-  display: none;
+  display: block;
 }
 
-@media (hover: none) and (pointer: coarse) {
-  .touch-controls {
-    display: block;
-  }
-
-  #pc-hint {
-    display: none;
-  }
+.touch-zone {
+  position: absolute;
+  bottom: var(--touch-pad);
+  display: flex;
+  align-items: flex-end;
 }
 
-@media (hover: hover) {
-  .touch-controls {
-    display: none !important;
-  }
+.touch-zone-left {
+  left: var(--touch-pad);
 }
 
-/* D-Pad */
+.touch-zone-right {
+  right: var(--touch-pad);
+  gap: var(--action-gap);
+}
+
 .dpad-grid {
   display: grid;
-  grid-template-columns: repeat(3, 52px);
-  grid-template-rows: repeat(3, 52px);
-  gap: 4px;
+  grid-template-columns: repeat(3, var(--dpad-cell));
+  grid-template-rows: repeat(3, var(--dpad-cell));
+  gap: var(--dpad-gap);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
 }
 
 .dpad-btn {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(4px);
-  border: 2px solid rgba(166, 166, 166, 0.6);
-  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  border: 2px solid rgba(166, 166, 166, 0.65);
+  border-radius: clamp(0.5rem, 2vw, 0.65rem);
   color: #ffffff;
-  font-size: 1.1rem;
+  font-size: clamp(0.9rem, 3.5vw, 1.15rem);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s, transform 0.1s;
+  transition: background 0.1s, transform 0.1s, border-color 0.1s;
   user-select: none;
 }
 
 .dpad-btn:active,
 .dpad-btn.pressed {
-  background: rgba(236, 119, 0, 0.5);
+  background: rgba(236, 119, 0, 0.55);
   transform: scale(0.92);
   border-color: #ec7700;
 }
@@ -335,32 +363,32 @@ body {
 .dpad-btn[data-dir="down"]  { grid-column: 2; grid-row: 3; }
 .dpad-btn[data-dir="right"] { grid-column: 3; grid-row: 2; }
 
-/* Botones de acción A/B */
 .action-btn {
-  width: 64px;
-  height: 64px;
+  width: var(--action-size);
+  height: var(--action-size);
   border-radius: 50%;
-  font-family: 'Oswald', sans-serif;
+  font-family: 'Kanit', 'Oswald', sans-serif;
   font-style: italic;
-  font-weight: 700;
-  font-size: 1.4rem;
-  border: 2px solid rgba(166, 166, 166, 0.7);
+  font-weight: 800;
+  font-size: clamp(1.1rem, 4.5vw, 1.45rem);
+  border: 2px solid rgba(166, 166, 166, 0.75);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s, background 0.1s;
+  transition: transform 0.1s, background 0.1s, border-color 0.1s;
   user-select: none;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
 }
 
 .action-btn-a {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #4caf50;
 }
 
 .action-btn-b {
-  background: rgba(236, 119, 0, 0.25);
+  background: rgba(236, 119, 0, 0.35);
   color: #ec7700;
 }
 
@@ -368,6 +396,42 @@ body {
 .action-btn.pressed {
   transform: scale(0.9);
   border-color: #ec7700;
+}
+
+/* Escritorio: controles al 60%, en esquinas inferiores */
+@media (min-width: 1024px) {
+  :root {
+    --dpad-cell: clamp(1.65rem, 2.2vw, 2.1rem);
+    --dpad-gap: 0.2rem;
+    --action-size: clamp(2rem, 2.8vw, 2.7rem);
+    --action-gap: 0.5rem;
+    --touch-pad: 0.5rem;
+  }
+
+  .touch-controls {
+    opacity: 0.92;
+  }
+
+  #pc-hint {
+    display: block;
+  }
+}
+
+/* Móvil: ocultar hint, maximizar área táctil */
+@media (max-width: 1023px) {
+  #pc-hint {
+    display: none;
+  }
+
+  .touch-zone-left {
+    bottom: max(var(--touch-pad), env(safe-area-inset-bottom, 0.5rem));
+    left: max(var(--touch-pad), env(safe-area-inset-left, 0.5rem));
+  }
+
+  .touch-zone-right {
+    bottom: max(var(--touch-pad), env(safe-area-inset-bottom, 0.5rem));
+    right: max(var(--touch-pad), env(safe-area-inset-right, 0.5rem));
+  }
 }
 
 /* ── Leaderboard ── */

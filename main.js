@@ -35,7 +35,10 @@ const POSSESS_DIST = PLAYER_R + BALL_R + 4;
 const INTERCEPT_RANGE = 120;
 const AI_CHASE_DIST = 180;
 const AI_TACTICAL_DIST = 320;
-const AI_STUCK_SECONDS = 2;
+const LERP_CHASE = 0.045;
+const LERP_BASE = 0.028;
+const GK_BOX_W = 95;
+const GK_BOX_H = 140;
 
 // Colores de cancha
 const COLORS = {
@@ -218,16 +221,18 @@ function updateSelectionUI() {
 // ENTIDADES DEL JUEGO
 // ═══════════════════════════════════════════
 
-function getFormationPositions(team) {
+/** Slots únicos por equipo — evita amontonamiento en esquinas */
+function getFormationSlots(team) {
   const isHome = team === 'home';
-  const dir = isHome ? 1 : -1;
-  const baseX = isHome ? 100 : FIELD.w - 100;
+  const gkX = isHome ? 88 : FIELD.w - 88;
+  const lineDef = isHome ? 265 : FIELD.w - 265;
+  const lineMid = isHome ? 425 : FIELD.w - 425;
   return [
-    { x: baseX, y: FIELD.h / 2, isGK: true },
-    { x: baseX + dir * 180, y: FIELD.h * 0.25, isGK: false },
-    { x: baseX + dir * 180, y: FIELD.h * 0.75, isGK: false },
-    { x: baseX + dir * 340, y: FIELD.h * 0.38, isGK: false },
-    { x: baseX + dir * 340, y: FIELD.h * 0.62, isGK: false }
+    { x: gkX, y: FIELD.h * 0.5, isGK: true, role: 'gk' },
+    { x: lineDef, y: FIELD.h * 0.22, isGK: false, role: 'def' },
+    { x: lineDef, y: FIELD.h * 0.78, isGK: false, role: 'def' },
+    { x: lineMid, y: FIELD.h * 0.36, isGK: false, role: 'mid' },
+    { x: lineMid, y: FIELD.h * 0.64, isGK: false, role: 'mid' }
   ];
 }
 
@@ -241,11 +246,11 @@ function createPlayer(x, y, team, number, isGK = false) {
     isActive: false,
     tackleCooldown: 0,
     aimAngle: team === 'home' ? 0 : Math.PI,
-    lastX: x,
-    lastY: y,
-    stuckTimer: 0,
+    baseX: x,
+    baseY: y,
+    role: 'mid',
+    jitterTimer: Math.random() * 0.3,
 
-    /** Actualiza física y lógica de cada jugador (usuario o IA) */
     update(dt, game) {
       updatePlayerEntity(this, game, dt);
     }
@@ -253,10 +258,19 @@ function createPlayer(x, y, team, number, isGK = false) {
   return player;
 }
 
-function createFormation(team) {
-  return getFormationPositions(team).map((pos, i) =>
-    createPlayer(pos.x, pos.y, team, i + 1, pos.isGK)
-  );
+/** Inicializa un equipo con coordenadas base únicas por jugador */
+function initializePlayers(team) {
+  return getFormationSlots(team).map((slot, i) => {
+    const player = createPlayer(slot.x, slot.y, team, i + 1, slot.isGK);
+    player.baseX = slot.x;
+    player.baseY = slot.y;
+    player.role = slot.role;
+    return player;
+  });
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }
 
 function clampPlayerSpeed(p, maxSpeed) {
@@ -267,92 +281,115 @@ function clampPlayerSpeed(p, maxSpeed) {
   }
 }
 
-function applySteering(p, targetX, targetY, accel) {
-  const dx = targetX - p.x;
-  const dy = targetY - p.y;
-  const d = Math.hypot(dx, dy) || 1;
-  if (d > 3) {
-    p.vx += (dx / d) * accel;
-    p.vy += (dy / d) * accel;
-    p.aimAngle = Math.atan2(dy, dx);
-  }
+function applyLerpSteering(player, targetX, targetY, lerpFactor) {
+  const nx = lerp(player.x, targetX, lerpFactor);
+  const ny = lerp(player.y, targetY, lerpFactor);
+  player.vx += (nx - player.x) * 0.14;
+  player.vy += (ny - player.y) * 0.14;
+  const dx = targetX - player.x;
+  const dy = targetY - player.y;
+  if (Math.hypot(dx, dy) > 2) player.aimAngle = Math.atan2(dy, dx);
 }
 
-function updateHomeTeammate(player, g) {
-  const idx = g.homePlayers.indexOf(player);
-  const form = getFormationPositions('home');
-  const target = form[idx];
-  if (target) applySteering(player, target.x, target.y, 0.28);
-
-  const ballDist = dist(player, g.ball);
-  if (!g.ball.owner && ballDist < 220) {
-    applySteering(player, g.ball.x, g.ball.y, 0.38);
-  } else if (g.ball.owner?.team === 'home' && ballDist < 300) {
-    applySteering(player, g.ball.x, g.ball.y, 0.22);
-  }
-  clampPlayerSpeed(player, PLAYER_SPEED * 0.9);
+function applyJitter(player) {
+  player.vx += (Math.random() - 0.5) * 0.4;
+  player.vy += (Math.random() - 0.5) * 0.4;
 }
 
-function updateAwayPlayerAI(player, g, dt) {
-  const { ball, awayPlayers, allPlayers } = g;
-  const midfield = FIELD.w / 2;
+function getGoalkeeperTarget(player, ball) {
+  const isHome = player.team === 'home';
+  const goalCY = FIELD.h / 2;
+  const anchorX = isHome ? GOAL.w + 58 : FIELD.w - GOAL.w - 58;
+  const minX = isHome ? GOAL.w + PLAYER_R : FIELD.w - GOAL.w - GK_BOX_W;
+  const maxX = isHome ? GOAL.w + GK_BOX_W : FIELD.w - GOAL.w - PLAYER_R;
+  const minY = goalCY - GK_BOX_H / 2;
+  const maxY = goalCY + GK_BOX_H / 2;
+  return {
+    x: clamp(anchorX, minX, maxX),
+    y: clamp(lerp(player.baseY, ball.y, 0.32), minY, maxY)
+  };
+}
+
+function computeMoveTarget(player, g) {
+  const { ball, allPlayers } = g;
+  if (player.isGK) return getGoalkeeperTarget(player, ball);
+
+  let tx = player.baseX;
+  let ty = player.baseY;
   const ballDist = dist(player, ball);
-  const hasBall = ball.owner === player;
-  const homeHasBall = ball.owner && ball.owner.team === 'home';
+  const ballShift = clamp((ball.x - FIELD.w / 2) / (FIELD.w / 2), -1, 1);
+  const push = (player.team === 'home' ? 1 : -1) * ballShift * 45;
+  tx += push * (player.role === 'mid' ? 0.75 : 0.4);
+  ty += ballShift * 18 * (player.role === 'def' ? 0.5 : 1);
 
-  if (hasBall) {
-    const goalX = 0;
-    const goalY = FIELD.h / 2;
-    if (player.x > midfield - 60 && g.aiShootCooldown <= 0) {
-      const dx = goalX - player.x;
-      const dy = goalY - player.y;
-      const d = Math.hypot(dx, dy) || 1;
-      ball.owner = null;
-      ball.vx = (dx / d) * (SHOOT_BASE + 4);
-      ball.vy = (dy / d) * (SHOOT_BASE + 4);
-      g.aiShootCooldown = 60;
-    } else {
-      applySteering(player, goalX + 60, goalY, 0.55);
-    }
-  } else if (ballDist < AI_CHASE_DIST) {
-    let targetX = ball.x;
-    let targetY = ball.y;
-    if (homeHasBall) {
-      const carrier = ball.owner;
+  if (ballDist < AI_CHASE_DIST) {
+    const w = (1 - ballDist / AI_CHASE_DIST) * 0.55;
+    let bx = ball.x;
+    let by = ball.y;
+    if (ball.owner && ball.owner.team !== player.team) {
       const obstacles = allPlayers.filter((p) => p !== player);
       if (!lineOfSight(player.x, player.y, ball.x, ball.y, obstacles, PLAYER_R)) {
-        targetX = carrier.x;
-        targetY = carrier.y;
+        bx = ball.owner.x;
+        by = ball.owner.y;
       }
     }
-    applySteering(player, targetX, targetY, 0.6);
+    tx = lerp(tx, bx, w);
+    ty = lerp(ty, by, w);
   } else if (ballDist < AI_TACTICAL_DIST && !ball.owner) {
-    applySteering(player, ball.x, ball.y, 0.4);
-  } else {
-    const tactical = getTacticalPosition(player, awayPlayers, ball);
-    applySteering(player, tactical.x, tactical.y, 0.35);
+    tx = lerp(tx, ball.x, 0.3);
+    ty = lerp(ty, ball.y, 0.3);
   }
 
+  return { x: tx, y: ty };
+}
+
+function updateAwayBallCarrier(player, g) {
+  const midfield = FIELD.w / 2;
+  const goalX = 0;
+  const goalY = FIELD.h / 2;
+  if (player.x > midfield - 60 && g.aiShootCooldown <= 0) {
+    const dx = goalX - player.x;
+    const dy = goalY - player.y;
+    const d = Math.hypot(dx, dy) || 1;
+    g.ball.owner = null;
+    g.ball.vx = (dx / d) * (SHOOT_BASE + 4);
+    g.ball.vy = (dy / d) * (SHOOT_BASE + 4);
+    g.aiShootCooldown = 60;
+    return;
+  }
+  applyLerpSteering(player, goalX + 60, goalY, LERP_CHASE * 1.4);
   clampPlayerSpeed(player, AI_SPEED);
+}
+
+function updateAutoMovement(player, g, maxSpeed) {
+  const target = computeMoveTarget(player, g);
+  const lerpF = dist(player, g.ball) < AI_CHASE_DIST ? LERP_CHASE : LERP_BASE;
+  applyLerpSteering(player, target.x, target.y, lerpF);
+  clampPlayerSpeed(player, maxSpeed);
 }
 
 function updatePlayerEntity(player, g, dt) {
   if (player.tackleCooldown > 0) player.tackleCooldown--;
 
-  if (player.team === 'home') {
-    if (player.isActive) {
-      const move = Input.getMoveVector();
-      if (move.x !== 0 || move.y !== 0) {
-        player.vx += move.x * 0.65;
-        player.vy += move.y * 0.65;
-        player.aimAngle = Math.atan2(move.y, move.x);
-      }
-      clampPlayerSpeed(player, PLAYER_SPEED);
-    } else {
-      updateHomeTeammate(player, g);
+  if (player.team === 'home' && player.isActive) {
+    const move = Input.getMoveVector();
+    if (move.x !== 0 || move.y !== 0) {
+      player.vx += move.x * 0.65;
+      player.vy += move.y * 0.65;
+      player.aimAngle = Math.atan2(move.y, move.x);
     }
+    clampPlayerSpeed(player, PLAYER_SPEED);
+  } else if (player.team === 'away' && g.ball.owner === player) {
+    updateAwayBallCarrier(player, g);
   } else {
-    updateAwayPlayerAI(player, g, dt);
+    const maxSpd = player.team === 'home' ? PLAYER_SPEED * 0.9 : AI_SPEED;
+    updateAutoMovement(player, g, maxSpd);
+  }
+
+  player.jitterTimer = (player.jitterTimer || 0) + dt;
+  if (player.jitterTimer >= 0.35 + Math.random() * 0.15) {
+    applyJitter(player);
+    player.jitterTimer = 0;
   }
 
   player.vx *= FRICTION;
@@ -360,8 +397,6 @@ function updatePlayerEntity(player, g, dt) {
   player.x += player.vx;
   player.y += player.vy;
   resolvePlayerWall(player);
-
-  if (player.team === 'away') updateAIStuck(player, dt);
 }
 
 function updateAIPassIntercept(g) {
@@ -372,7 +407,7 @@ function updateAIPassIntercept(g) {
     if (dist(ai, ball) < POSSESS_DIST + 10) {
       const obstacles = allPlayers.filter((p) => p !== ai);
       if (lineOfSight(ai.x, ai.y, ball.x + ball.vx * 5, ball.y + ball.vy * 5, obstacles, PLAYER_R)) {
-        applySteering(ai, ball.x, ball.y, 0.7);
+        applyLerpSteering(ai, ball.x, ball.y, LERP_CHASE * 1.5);
       }
     }
   }
@@ -686,51 +721,6 @@ function doTackle(g, player) {
 // INTELIGENCIA ARTIFICIAL
 // ═══════════════════════════════════════════
 
-/** Posición táctica según rol: portero atrás, defensas retrasados, medios al centro */
-function getTacticalPosition(ai, awayPlayers, ball) {
-  const idx = awayPlayers.indexOf(ai);
-  const ballOnHomeHalf = ball.x < FIELD.w / 2;
-  const shift = ballOnHomeHalf ? -40 : 60;
-
-  if (ai.isGK) {
-    return {
-      x: FIELD.w - 75,
-      y: clamp(FIELD.h / 2 + (ball.y - FIELD.h / 2) * 0.35, PLAYER_R + 20, FIELD.h - PLAYER_R - 20)
-    };
-  }
-
-  // Defensas (índices 1 y 2)
-  if (idx === 1 || idx === 2) {
-    return {
-      x: FIELD.w - 260 + shift * 0.3,
-      y: idx === 1 ? FIELD.h * 0.28 : FIELD.h * 0.72
-    };
-  }
-
-  // Mediocampistas (índices 3 y 4)
-  return {
-    x: FIELD.w - 400 + shift * 0.5,
-    y: idx === 3 ? FIELD.h * 0.42 : FIELD.h * 0.58
-  };
-}
-
-function updateAIStuck(ai, dt) {
-  const moved = Math.hypot(ai.x - ai.lastX, ai.y - ai.lastY);
-  if (moved < 1.5) {
-    ai.stuckTimer += dt;
-  } else {
-    ai.stuckTimer = 0;
-  }
-  ai.lastX = ai.x;
-  ai.lastY = ai.y;
-
-  if (ai.stuckTimer >= AI_STUCK_SECONDS) {
-    ai.vx += (Math.random() - 0.5) * 2.5;
-    ai.vy += (Math.random() - 0.5) * 2.5;
-    ai.stuckTimer = 0;
-  }
-}
-
 // ═══════════════════════════════════════════
 // DETECCIÓN DE GOLES
 // ═══════════════════════════════════════════
@@ -772,8 +762,8 @@ function resetAfterGoal(g, scorer) {
   g.ball.owner = null;
   g.goalPause = 90; // ~1.5s a 60fps
 
-  g.homePlayers = createFormation('home');
-  g.awayPlayers = createFormation('away');
+  g.homePlayers = initializePlayers('home');
+  g.awayPlayers = initializePlayers('away');
   g.homePlayers[2].isActive = true;
   syncAllPlayers(g);
   updateHUD(g);
@@ -798,8 +788,8 @@ class Match {
     this.bPressed = false;
     this.aiShootCooldown = 0;
 
-    this.homePlayers = createFormation('home');
-    this.awayPlayers = createFormation('away');
+    this.homePlayers = initializePlayers('home');
+    this.awayPlayers = initializePlayers('away');
     this.ball = createBall();
 
     this.homePlayers[2].isActive = true;
